@@ -1,0 +1,24 @@
+{
+  "name": "ai-task-manager-agent",
+  "version": "1.0.0",
+  "description": "Asistente personal de IA para gestion de tareas",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "npm run build && node dist/index.js",
+    "agent:test": "npm run build && node dist/test-workout-agent.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "^2.4.0",
+    "@openai/agents": "^0.21.0",
+    "zod": "^4.6.7"
+  }
+}
