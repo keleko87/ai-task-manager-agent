@@ -10,7 +10,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const [{ WorkoutAgent }, { OpenAIProvider, Runner }] = await Promise.all([
+  const [{ WorkoutExtractionAgent }, { OpenAIProvider, Runner }] = await Promise.all([
     import("./workout-agent.js"),
     import("@openai/agents"),
   ]);
@@ -26,7 +26,7 @@ async function main(): Promise<void> {
   });
 
   try {
-    const result = await runner.run(WorkoutAgent, originalText);
+    const result = await runner.run(WorkoutExtractionAgent, originalText);
     if (typeof result.finalOutput !== "string") {
       throw new Error("WorkoutAgent no devolvió una respuesta de texto.");
     }

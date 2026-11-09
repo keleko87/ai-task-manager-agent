@@ -7,7 +7,8 @@
   "scripts": {
     "build": "tsc",
     "start": "npm run build && node dist/index.js",
-    "agent:test": "npm run build && node dist/test-workout-agent.js"
+    "agent:test": "npm run build && node dist/test-workout-agent.js",
+    "agent:save": "npm run build && node dist/save-workout-flow.js"
   },
   "keywords": [],
   "author": "",
