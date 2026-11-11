@@ -1,9 +1,13 @@
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
-import { ZodError, z } from "zod";
-import { WorkoutExtractionSchema } from "./workout-schema.js";
+import { ZodError } from "zod";
+import {
+  parseWorkoutToolArguments,
+  type WorkoutExtraction,
+} from "./workout-schema.js";
 import { resolveWorkoutStoragePath } from "./storage/workout-store.js";
 import type { WorkoutRunContext } from "./workout-context.js";
+import { confirmAndResumeWorkoutSave } from "./workout-save-approval.js";
 
 async function askForApproval(): Promise<boolean> {
   const readline = createInterface({ input: stdin, output: stdout });
@@ -71,10 +75,9 @@ async function main(): Promise<void> {
       return;
     }
 
-    let workout: z.infer<typeof WorkoutExtractionSchema>;
+    let workout: WorkoutExtraction;
     try {
-      const rawArguments: unknown = JSON.parse(approval.arguments ?? "");
-      workout = WorkoutExtractionSchema.parse(rawArguments);
+      workout = parseWorkoutToolArguments(approval.arguments ?? "");
     } catch (error) {
       firstResult.state.reject(approval, {
         message: "Los argumentos de guardado eran invalidos; no se guardo nada.",
@@ -96,20 +99,24 @@ async function main(): Promise<void> {
     console.dir({ ...workout, originalText }, { depth: null, colors: true });
     console.log(`Archivo de destino: ${context.storagePath}`);
 
-    if (!(await askForApproval())) {
-      firstResult.state.reject(approval, {
-        message: "El usuario cancelo o rechazo el guardado.",
-      });
+    const saveResult = await confirmAndResumeWorkoutSave({
+      workout,
+      approval,
+      state: firstResult.state,
+      context,
+      confirm: askForApproval,
+      resume: () =>
+        runner.run(WorkoutAgent, firstResult.state, {
+          context,
+        }),
+    });
+
+    if (!saveResult.approved) {
       console.log("Cancelado. No se guardo ningun entrenamiento.");
       return;
     }
 
-    context.approvedWorkoutJson = JSON.stringify(workout);
-    firstResult.state.approve(approval);
-    const savedResult = await runner.run(WorkoutAgent, firstResult.state, {
-      context,
-    });
-
+    const savedResult = saveResult.result;
     if (typeof savedResult.finalOutput !== "string") {
       throw new Error("La herramienta no confirmo el guardado.");
     }

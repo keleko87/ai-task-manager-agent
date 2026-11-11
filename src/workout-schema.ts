@@ -13,10 +13,10 @@ export const WorkoutExtractionSchema = z.object({
         .nullable()
         .default(null)
         .describe("Nombre mencionado o null."),
-      sets: z.number().int().nullable().describe(
+      sets: z.number().int().positive().safe().nullable().describe(
         "Número de series mencionado o null.",
       ).default(null),
-      repetitions: z.number().int().nullable().describe(
+      repetitions: z.number().int().positive().safe().nullable().describe(
         "Número de repeticiones mencionado o null.",
       ).default(null),
       weight: z
@@ -32,3 +32,15 @@ export const WorkoutExtractionSchema = z.object({
     }),
   ),
 }).strict();
+
+export type WorkoutExtraction = z.infer<typeof WorkoutExtractionSchema>;
+
+export function parseWorkoutToolArguments(argumentsJson: string): WorkoutExtraction {
+  let candidate: unknown;
+  try {
+    candidate = JSON.parse(argumentsJson);
+  } catch (error) {
+    throw new Error("saveWorkout recibio JSON invalido.", { cause: error });
+  }
+  return WorkoutExtractionSchema.parse(candidate);
+}

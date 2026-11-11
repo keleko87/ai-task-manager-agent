@@ -44,3 +44,23 @@ WORKOUTS_FILE=.tmp/workouts-test.json npm run agent:save -- "Hoy hice sentadilla
 ```
 
 Confirma con `s` para guardar o responde `n`/pulsa Enter para cancelar. `npm run agent:test` sigue disponible para probar solo la extraccion; `npm run start` y `npm run build` no cambian.
+
+## Pruebas automatizadas
+
+```sh
+npm test
+npm run test:watch
+npm run test:coverage
+```
+
+Vitest ejecuta los tests unitarios del esquema/parser, la persistencia JSON en directorios temporales, los errores de datos y escritura, la deduplicacion, y el permiso de un solo uso de `saveWorkout`. Los tests habituales no llaman a Ollama y nunca usan `data/workouts.json`.
+
+La clave de duplicado se calcula con la fecha del entrenamiento y los campos normalizados de sus ejercicios; ignora el texto original y la hora de guardado. Dos registros iguales para la misma fecha se consideran duplicados, mientras que los mismos ejercicios en fechas distintas se permiten. Si la fecha es desconocida (`null`), solo se bloquea otro registro con fecha desconocida y el mismo contenido normalizado.
+
+Para verificar manualmente function calling real con Qwen3 y autorizar el guardado desde la terminal:
+
+```sh
+WORKOUTS_FILE=.tmp/ollama-eval.json npm run agent:eval:ollama -- "Hoy hice sentadillas: tres series de ocho repeticiones con 60 kg"
+```
+
+Este eval opcional requiere Ollama local y `qwen3:4b`; solicita confirmacion antes de escribir en el archivo temporal. `npm test` no depende del modelo.
