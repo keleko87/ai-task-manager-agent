@@ -204,3 +204,97 @@ y separación entre miembros de clases. Se excluyen dependencias, compilados,
 coverage y datos locales. El parser Babel evita la incompatibilidad declarada del
 parser typescript-eslint con TypeScript 7; la comprobación de tipos sigue siendo
 responsabilidad de `npm run build`.
+
+## Primera escritura controlada (preparada; no ejecutada)
+
+Esta sección sustituye la propuesta anterior de `append-page-end` y el requisito
+anterior de CAS: la ubicación ahora es `records-section-start`, inmediatamente
+debajo del encabezado único `## Registros de prueba`, antes de la tabla semanal.
+El transporte llama `notion-update-page` con `update_content`: sustituye solo ese
+encabezado por el mismo encabezado más los bloques nuevos. No reemplaza la página,
+no edita filas y no crea subpáginas. Los encabezados de registros son de nivel 3,
+y los de ejercicios de nivel 4. La transcripción se conserva en un bloque literal
+con fence de longitud suficiente para admitir backticks y etiquetas sin ejecutarlas.
+Los bloques devueltos por el conversor siguen siendo bloques de dominio; el
+transporte MCP recibe su representación en Markdown de Notion.
+
+Prepara un JSON con fecha ISO exacta usando `examples/notion-workout.json` como
+plantilla (contiene datos ficticios: sustituir antes de autorizar).
+
+```sh
+# Solo vista previa, puede leer Notion pero nunca escribe:
+npm run notion:preview-workout -- examples/notion-workout.json
+
+# Prueba real futura, solo tras decidir realizarla:
+npm run notion:preview-workout -- examples/notion-workout.json --enable-one-write
+```
+
+El flag por sí solo no autoriza nada. El segundo comando requiere terminal
+interactiva y muestra destino, ubicación, Markdown exacto y digest. Para aprobar
+hay que escribir `GUARDAR <digest completo mostrado>`; cualquier otra respuesta
+cancela. TypeScript verifica el permiso asociado al contenido y destino guardados
+internamente, con caducidad de diez minutos y un único uso. Se conserva el OAuth,
+el llavero y el constructor de servidor existentes; el comando de lectura sigue
+anunciando solo fetch por defecto. No se conecta MCP a Qwen3. Si hace falta
+reautorizar, usa primero `notion:read-test-page -- --authorize`.
+
+Se comprueban duplicados en la vista previa y justo antes de escribir. El servicio
+y el transporte releen el destino y comparan contenido/revisión. El MCP no admite
+un CAS atómico: otra edición puede ocurrir entre esa lectura y la escritura. El
+reemplazo de ancla mínimo limita el área afectada, pero no promete exclusión entre
+procesos. Evita editar la página durante la prueba. El bloqueo local solo cubre
+una instancia del servicio.
+
+Después de cualquier intento, incluso si hubo timeout, el servicio relee y exige
+que el contenido completo coincida con la inserción esperada y haya un único
+marcador. Si Notion normaliza el Markdown, puede quedar un registro correcto sin
+poder declararlo verificado: inspeccionar antes de preparar otro intento. No hay
+reintentos automáticos de escritura. Las tareas asíncronas o advertencias se
+consideran inciertas y se reconcilian mediante lectura; no se promete su finalización.
+Si también falla la lectura posterior, detenerse y repetir solo la lectura antes
+de volver a preparar una vista previa. Los registros legacy de la misma fecha
+siguen exigiendo revisión humana. `saveWorkout` y `data/workouts.json` son ajenos
+a este flujo.
+
+Validación de esta fase: build, lint y 83 tests con mocks. No se ejecutó el comando
+con escritura habilitada ni se modificó contenido de Notion.
+
+## Verificación posterior estructural (sustituye la comparación textual exacta)
+
+La primera escritura mostró equivalencias de representación: `2026\-11\-14`
+se convirtió en `2026-11-14`, el marcador inline pasó de backticks a `<code>`,
+Notion compactó líneas vacías entre viñetas y cambió el lenguaje del fence de
+`text` a `txt`. La igualdad exacta anterior producía un falso error.
+
+`notion-record-verification.ts` compara bloques canónicos, conservando orden,
+nivel de encabezados, texto, series, cifras, cargas, notas y marcador único. Se
+admiten envolturas de rich text conocidas, escapes y entidades equivalentes,
+CRLF/LF y espacios no significativos fuera de bloques literales. La transcripción
+literal conserva espacios, saltos y signos (solo CRLF/LF son equivalentes).
+No se ignoran cambios de fecha, sesión, ejercicios, repeticiones, peso ni texto.
+Se delimita el registro bajo la sección autorizada; encontrar el marcador solo
+no basta. Después de una escritura también se compara el resto de la página con
+el estado previo canónico. Una comprobación aislada sin snapshot previo verifica
+el registro, pero no puede certificar retrospectivamente que nada más cambió.
+
+Resultados explícitos:
+- `VERIFIED`: marcador único, ubicación y estructura/contenido coincidentes.
+- `NOT_FOUND`: lectura completa de la sección sin marcador esperado; no autoriza
+  automáticamente otro intento.
+- `INDETERMINATE`: contenido distinto, marcador duplicado, lectura incompleta,
+  timeout, falta de permisos u otra imposibilidad de verificar.
+
+El servicio conserva `saved` únicamente para `VERIFIED` y adjunta el resultado.
+Los otros estados generan `NotionVerificationError` con propiedad `verification`;
+no se reintenta la escritura. El módulo de inserción y transporte MCP no cambian.
+
+Para verificar el registro existente en **solo lectura**:
+
+```sh
+npm run notion:verify-workout -- examples/notion-workout.json
+```
+
+Este comando reutiliza OAuth y el servidor de lectura, llama únicamente fetch y
+no importa ningún escritor ni solicita autorizaciones de guardado. El JSON debe
+ser exactamente el usado para el registro; cambiarlo produce otro marcador.
+No usar el comando de escritura para comprobar un registro existente.

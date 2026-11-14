@@ -1,3 +1,8 @@
+import {
+  verifySavedRecord,
+  type VerificationResult,
+} from "./notion-record-verification.js";
+import { insertRecord } from "./notion-record-section.js";
 import { createHash, randomUUID } from "node:crypto";
 import {
   assertDestination,
@@ -15,7 +20,7 @@ import {
 export interface WorkoutPreview {
   destinationId: typeof NOTION_PAGE_ID;
   destinationUrl: string;
-  placement: "append-page-end";
+  placement: "records-section-start";
   markdown: string;
   marker: string;
   digest: string;
@@ -27,6 +32,8 @@ export interface NotionAppendTransport {
     pageId: typeof NOTION_PAGE_ID;
     markdown: string;
     expectedRevision: string;
+    expectedContent: string;
+    marker: string;
   }): Promise<void>;
 }
 
@@ -96,7 +103,7 @@ export function createNotionWorkoutService(options: {
     async preview(
       workout: NotionWorkoutInput,
       conversionOptions: WorkoutToNotionOptions = {},
-      placement?: "append-page-end",
+      placement?: "records-section-start",
     ) {
       const conversion = workoutToNotionBlocks(workout, conversionOptions);
       const page = await options.reader.read();
@@ -114,9 +121,11 @@ export function createNotionWorkoutService(options: {
         return { status: "needs-clarification" as const };
       }
 
-      if (placement !== "append-page-end") {
+      if (placement !== "records-section-start") {
         throw new Error("Ubicación no autorizada.");
       }
+
+      insertRecord(page.content, conversion.markdown);
 
       const content = {
         destinationId: NOTION_PAGE_ID,
@@ -193,25 +202,35 @@ export function createNotionWorkoutService(options: {
           throw new Error("La página cambió; genera otra vista previa.");
         }
 
-        await options.writer.append({
-          pageId: NOTION_PAGE_ID,
-          markdown: preview.markdown,
-          expectedRevision: latest.revision,
-        });
+        let writeError: unknown;
 
-        const verified = await options.reader.read();
+        try {
+          await options.writer.append({
+            pageId: NOTION_PAGE_ID,
+            markdown: preview.markdown,
+            expectedRevision: latest.revision,
+            expectedContent: latest.content,
+            marker: preview.marker,
+          });
+        } catch (error) {
+          writeError = error;
+        }
 
-        if (
-          !verified.content.includes(preview.marker) ||
-          !verified.content.includes(latest.content)
-        ) {
-          throw new Error(
-            "Escritura no verificada; no se declara éxito. Revisa el destino antes de reintentar.",
-          );
+        // Always reconcile uncertain writes by reading; never retry an append automatically.
+        const verification = await verifySavedRecord(
+          options.reader,
+          preview.markdown,
+          preview.marker,
+          latest.content,
+        );
+
+        if (verification.status !== "VERIFIED") {
+          throw new NotionVerificationError(verification, writeError);
         }
 
         return {
           status: "saved" as const,
+          verification,
           marker: preview.marker,
           url: NOTION_PAGE_URL,
         };
@@ -220,4 +239,16 @@ export function createNotionWorkoutService(options: {
       }
     },
   };
+}
+
+export class NotionVerificationError extends Error {
+  constructor(
+    public readonly verification: VerificationResult,
+    cause?: unknown,
+  ) {
+    super(
+      `Escritura no verificada: ${verification.status}. ${verification.reason}`,
+      { cause },
+    );
+  }
 }

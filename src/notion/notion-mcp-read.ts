@@ -10,7 +10,10 @@ import {
 } from "./notion-read-service.js";
 import { NOTION_MCP_URL, type NotionOAuthProvider } from "./notion-oauth.js";
 
-export function createReadServer(authProvider: NotionOAuthProvider) {
+export function createReadServer(
+  authProvider: NotionOAuthProvider,
+  enableControlledWrite = false,
+) {
   return new MCPServerStreamableHttp({
     url: NOTION_MCP_URL,
     name: "notion-fixed-page-readonly",
@@ -18,7 +21,11 @@ export function createReadServer(authProvider: NotionOAuthProvider) {
     timeout: 20_000,
     errorFunction: null,
     cacheToolsList: true,
-    toolFilter: createMCPToolStaticFilter({ allowed: ["notion-fetch"] }),
+    toolFilter: createMCPToolStaticFilter({
+      allowed: enableControlledWrite
+        ? ["notion-fetch", "notion-update-page"]
+        : ["notion-fetch"],
+    }),
   });
 }
 

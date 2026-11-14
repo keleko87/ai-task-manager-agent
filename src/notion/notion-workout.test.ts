@@ -1,3 +1,4 @@
+import { insertRecord } from "./notion-record-section.js";
 import { describe, it, expect, vi } from "vitest";
 import {
   createWorkoutReader,
@@ -30,14 +31,14 @@ function fixture() {
   let page = {
     id: NOTION_PAGE_ID,
     title: "Pruebas",
-    content: "TABLA APROBADA",
+    content: "## Registros de prueba\n\n### Registro semanal\n\nTABLA APROBADA",
     complete: true,
     revision: "1",
   };
   const transport = { fetchPage: vi.fn(async () => ({ ...page })) };
   const reader = createWorkoutReader(transport);
   const append = vi.fn(async ({ markdown }: { markdown: string }) => {
-    page.content += `\n\n${markdown}`;
+    page.content = insertRecord(page.content, markdown);
 
     page.revision = "2";
   });
@@ -47,7 +48,7 @@ function fixture() {
 }
 
 async function ready(service: ReturnType<typeof createNotionWorkoutService>) {
-  const result = await service.preview(workout, {}, "append-page-end");
+  const result = await service.preview(workout, {}, "records-section-start");
 
   if (result.status !== "ready") {
     throw new Error("Expected preview");
@@ -271,7 +272,7 @@ describe("lectura y autorización", () => {
     f.append.mockRejectedValue(new Error("network"));
 
     await expect(f.service.saveWorkoutToNotion(auth)).rejects.toThrow(
-      "network",
+      "no verificada",
     );
   });
 
@@ -311,6 +312,9 @@ describe("lectura y autorización", () => {
       pageId: NOTION_PAGE_ID,
       markdown: workoutToNotionBlocks(workout).markdown,
       expectedRevision: "1",
+      expectedContent:
+        "## Registros de prueba\n\n### Registro semanal\n\nTABLA APROBADA",
+      marker: workoutToNotionBlocks(workout).marker,
     });
 
     await expect(f.service.saveWorkoutToNotion(auth)).rejects.toThrow();

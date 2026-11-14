@@ -15,7 +15,9 @@
     "agent:eval:ollama": "npm run build && node dist/save-workout-flow.js",
     "notion:read-test-page": "npm run build && node dist/notion/notion-read-cli.js",
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "notion:preview-workout": "npm run build && node dist/notion/notion-write-cli.js",
+    "notion:verify-workout": "npm run build && node dist/notion/notion-verify-cli.js"
   },
   "keywords": [],
   "author": "",

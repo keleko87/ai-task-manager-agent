@@ -134,20 +134,24 @@ function render(block: NotionWorkoutBlock): string {
   }
 
   if (block.type === "quote") {
-    return text
-      .split(/\r?\n/)
-      .map((line) => `> ${line}`)
-      .join("\n");
+    const fence = "`".repeat(
+      Math.max(
+        3,
+        ...(block.text.match(/`+/g) ?? []).map((run) => run.length + 1),
+      ),
+    );
+
+    return `${fence}text\n${block.text}\n${fence}`;
   }
 
   const prefix = {
-    heading_2: "## ",
-    heading_3: "### ",
+    heading_2: "### ",
+    heading_3: "#### ",
     paragraph: "",
     bulleted_list_item: "- ",
   }[block.type];
 
-  return prefix + text.replace(/\r?\n/g, "<br />");
+  return prefix + text.replace(/\r?\n/g, " \\\n");
 }
 
 export function workoutToNotionBlocks(
