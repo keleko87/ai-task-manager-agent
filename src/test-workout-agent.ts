@@ -2,18 +2,19 @@ import { WorkoutExtractionSchema } from "./workout-schema.js";
 
 async function main(): Promise<void> {
   const originalText = process.argv.slice(2).join(" ").trim();
+
   if (!originalText) {
     console.error(
       'Uso: npm run agent:test -- "Entrené sentadillas: 3 series de 8 repeticiones con 60 kg"',
     );
+
     process.exitCode = 1;
+
     return;
   }
 
-  const [{ WorkoutExtractionAgent }, { OpenAIProvider, Runner }] = await Promise.all([
-    import("./workout-agent.js"),
-    import("@openai/agents"),
-  ]);
+  const [{ WorkoutExtractionAgent }, { OpenAIProvider, Runner }] =
+    await Promise.all([import("./workout-agent.js"), import("@openai/agents")]);
   const localProvider = new OpenAIProvider({
     apiKey: "ollama",
     baseURL: "http://localhost:11434/v1",
@@ -27,6 +28,7 @@ async function main(): Promise<void> {
 
   try {
     const result = await runner.run(WorkoutExtractionAgent, originalText);
+
     if (typeof result.finalOutput !== "string") {
       throw new Error("WorkoutAgent no devolvió una respuesta de texto.");
     }
@@ -38,6 +40,7 @@ async function main(): Promise<void> {
       .trim();
     const jsonStart = responseText.indexOf("{");
     const jsonEnd = responseText.lastIndexOf("}");
+
     if (jsonStart === -1 || jsonEnd <= jsonStart) {
       throw new Error("La respuesta del modelo no contiene un objeto JSON.");
     }
@@ -46,6 +49,7 @@ async function main(): Promise<void> {
       responseText.slice(jsonStart, jsonEnd + 1),
     );
     const extraction = WorkoutExtractionSchema.parse(candidate);
+
     console.dir(
       {
         ...extraction,
@@ -60,5 +64,6 @@ async function main(): Promise<void> {
 
 main().catch((error: unknown) => {
   console.error("No se pudo completar la prueba del WorkoutAgent:", error);
+
   process.exitCode = 1;
 });

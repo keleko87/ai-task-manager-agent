@@ -14,7 +14,10 @@ import { confirmAndResumeWorkoutSave } from "./workout-save-approval.js";
 let temporaryDirectory: string;
 
 async function createContext(): Promise<WorkoutRunContext> {
-  temporaryDirectory = await mkdtemp(join(tmpdir(), "ai-task-manager-approval-"));
+  temporaryDirectory = await mkdtemp(
+    join(tmpdir(), "ai-task-manager-approval-"),
+  );
+
   return {
     originalText: "Hoy hice press banca, tres series de diez con 60 kg",
     approvedWorkoutJson: null,
@@ -46,9 +49,14 @@ const workout = parseWorkoutToolArguments(
 describe("saveWorkout approval", () => {
   it("requiere aprobacion humana segun el Agents SDK", async () => {
     expect(saveWorkout.name).toBe("saveWorkout");
+
     expect(typeof saveWorkout.needsApproval).toBe("function");
+
     await expect(
-      saveWorkout.needsApproval(new RunContext({} as WorkoutRunContext), workout),
+      saveWorkout.needsApproval(
+        new RunContext({} as WorkoutRunContext),
+        workout,
+      ),
     ).resolves.toBe(true);
   });
 
@@ -58,6 +66,7 @@ describe("saveWorkout approval", () => {
     await expect(
       saveWorkout.invoke(new RunContext(context), JSON.stringify(workout)),
     ).rejects.toThrow(/requiere aprobacion explicita/);
+
     await expect(readFile(context.storagePath, "utf8")).rejects.toMatchObject({
       code: "ENOENT",
     });
@@ -79,9 +88,13 @@ describe("saveWorkout approval", () => {
     });
 
     expect(result).toEqual({ approved: false });
+
     expect(state.reject).toHaveBeenCalledOnce();
+
     expect(state.approve).not.toHaveBeenCalled();
+
     expect(resume).not.toHaveBeenCalled();
+
     await expect(readFile(context.storagePath, "utf8")).rejects.toMatchObject({
       code: "ENOENT",
     });
@@ -105,24 +118,33 @@ describe("saveWorkout approval", () => {
     });
 
     expect(result).toMatchObject({ approved: true });
+
     expect(state.approve).toHaveBeenCalledOnce();
+
     expect(state.reject).not.toHaveBeenCalled();
+
     expect(resume).toHaveBeenCalledOnce();
+
     expect(context.approvedWorkoutJson).toBeNull();
 
     const records = JSON.parse(await readFile(context.storagePath, "utf8")) as {
       originalText: string;
     }[];
+
     expect(records).toHaveLength(1);
+
     expect(records[0]?.originalText).toBe(context.originalText);
   });
 
   it("consume la autorizacion antes de persistir y no permite reutilizarla", async () => {
     const context = await createContext();
+
     context.approvedWorkoutJson = JSON.stringify(workout);
+
     const runContext = new RunContext(context);
 
     await saveWorkout.invoke(runContext, JSON.stringify(workout));
+
     await expect(
       saveWorkout.invoke(runContext, JSON.stringify(workout)),
     ).rejects.toThrow(/requiere aprobacion explicita/);

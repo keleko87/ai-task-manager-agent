@@ -17,7 +17,9 @@ export type WorkoutRecord = z.infer<typeof WorkoutRecordSchema>;
 
 export interface WorkoutFileSystem {
   readFile(path: string, encoding: "utf8"): Promise<string>;
+
   mkdir(path: string, options: { recursive: true }): Promise<unknown>;
+
   writeFile(path: string, data: string, encoding: "utf8"): Promise<unknown>;
 }
 
@@ -26,6 +28,7 @@ const defaultFileSystem: WorkoutFileSystem = { readFile, mkdir, writeFile };
 export class DuplicateWorkoutError extends Error {
   constructor() {
     super("Este entrenamiento ya esta guardado para la misma fecha.");
+
     this.name = "DuplicateWorkoutError";
   }
 }
@@ -50,7 +53,9 @@ export function createWorkoutDeduplicationKey(
 }
 
 export function resolveWorkoutStoragePath(configuredPath?: string): string {
-  return configuredPath ? resolve(process.cwd(), configuredPath) : DEFAULT_WORKOUTS_PATH;
+  return configuredPath
+    ? resolve(process.cwd(), configuredPath)
+    : DEFAULT_WORKOUTS_PATH;
 }
 
 export async function appendWorkoutRecord(
@@ -63,21 +68,27 @@ export async function appendWorkoutRecord(
   try {
     const fileContents = await fileSystem.readFile(filePath, "utf8");
     let parsedJson: unknown;
+
     try {
       parsedJson = JSON.parse(fileContents);
     } catch (error) {
-      throw new Error(`El archivo ${filePath} contiene JSON invalido. No se modifico.`, {
-        cause: error,
-      });
+      throw new Error(
+        `El archivo ${filePath} contiene JSON invalido. No se modifico.`,
+        {
+          cause: error,
+        },
+      );
     }
 
     const parsedRecords = z.array(WorkoutRecordSchema).safeParse(parsedJson);
+
     if (!parsedRecords.success) {
       throw new Error(
         `Los entrenamientos existentes en ${filePath} no superan la validacion Zod. No se modifico.`,
         { cause: parsedRecords.error },
       );
     }
+
     existingRecords = parsedRecords.data;
   } catch (error) {
     if (
@@ -93,6 +104,7 @@ export async function appendWorkoutRecord(
   }
 
   const incomingKey = createWorkoutDeduplicationKey(record);
+
   if (
     existingRecords.some(
       (existing) => createWorkoutDeduplicationKey(existing) === incomingKey,
@@ -102,15 +114,19 @@ export async function appendWorkoutRecord(
   }
 
   const updatedRecords = [...existingRecords, record];
+
   try {
     await fileSystem.mkdir(dirname(filePath), { recursive: true });
+
     await fileSystem.writeFile(
       filePath,
       `${JSON.stringify(updatedRecords, null, 2)}\n`,
       "utf8",
     );
   } catch (error) {
-    throw new Error(`No se pudo escribir el archivo ${filePath}.`, { cause: error });
+    throw new Error(`No se pudo escribir el archivo ${filePath}.`, {
+      cause: error,
+    });
   }
 
   return updatedRecords.length;

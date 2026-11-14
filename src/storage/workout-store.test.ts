@@ -15,6 +15,7 @@ let temporaryDirectory: string;
 
 async function createTempDirectory(): Promise<string> {
   temporaryDirectory = await mkdtemp(join(tmpdir(), "ai-task-manager-tests-"));
+
   return temporaryDirectory;
 }
 
@@ -48,8 +49,13 @@ describe("appendWorkoutRecord", () => {
     const filePath = join(directory, "nested", "workouts.json");
 
     await expect(appendWorkoutRecord(makeRecord(), filePath)).resolves.toBe(1);
-    const saved = JSON.parse(await readFile(filePath, "utf8")) as WorkoutRecord[];
+
+    const saved = JSON.parse(
+      await readFile(filePath, "utf8"),
+    ) as WorkoutRecord[];
+
     expect(saved).toHaveLength(1);
+
     expect(saved[0]?.originalText).toBe("Hice sentadillas");
   });
 
@@ -63,8 +69,13 @@ describe("appendWorkoutRecord", () => {
     });
 
     await appendWorkoutRecord(first, filePath);
+
     await expect(appendWorkoutRecord(second, filePath)).resolves.toBe(2);
-    const saved = JSON.parse(await readFile(filePath, "utf8")) as WorkoutRecord[];
+
+    const saved = JSON.parse(
+      await readFile(filePath, "utf8"),
+    ) as WorkoutRecord[];
+
     expect(saved.map((record) => record.workoutDate)).toEqual([
       "2026-11-09",
       "2026-11-10",
@@ -74,18 +85,25 @@ describe("appendWorkoutRecord", () => {
   it("rechaza JSON corrupto sin modificarlo", async () => {
     const directory = await createTempDirectory();
     const filePath = join(directory, "workouts.json");
+
     await writeFile(filePath, "{broken", "utf8");
 
     await expect(appendWorkoutRecord(makeRecord(), filePath)).rejects.toThrow(
       /JSON invalido/,
     );
+
     await expect(readFile(filePath, "utf8")).resolves.toBe("{broken");
   });
 
   it("rechaza registros existentes que no cumplen Zod", async () => {
     const directory = await createTempDirectory();
     const filePath = join(directory, "workouts.json");
-    await writeFile(filePath, JSON.stringify([{ workoutDate: "ayer" }]), "utf8");
+
+    await writeFile(
+      filePath,
+      JSON.stringify([{ workoutDate: "ayer" }]),
+      "utf8",
+    );
 
     await expect(appendWorkoutRecord(makeRecord(), filePath)).rejects.toThrow(
       /no superan la validacion Zod/,
@@ -98,6 +116,7 @@ describe("appendWorkoutRecord", () => {
     const fileSystem = {
       readFile: vi.fn(async () => {
         const error = Object.assign(new Error("missing"), { code: "ENOENT" });
+
         throw error;
       }),
       mkdir: vi.fn(async () => undefined),
@@ -137,11 +156,17 @@ describe("deduplicacion", () => {
     expect(createWorkoutDeduplicationKey(first)).toBe(
       createWorkoutDeduplicationKey(repeated),
     );
+
     await appendWorkoutRecord(first, filePath);
-    await expect(appendWorkoutRecord(repeated, filePath)).rejects.toBeInstanceOf(
-      DuplicateWorkoutError,
-    );
-    const saved = JSON.parse(await readFile(filePath, "utf8")) as WorkoutRecord[];
+
+    await expect(
+      appendWorkoutRecord(repeated, filePath),
+    ).rejects.toBeInstanceOf(DuplicateWorkoutError);
+
+    const saved = JSON.parse(
+      await readFile(filePath, "utf8"),
+    ) as WorkoutRecord[];
+
     expect(saved).toHaveLength(1);
   });
 
@@ -150,6 +175,7 @@ describe("deduplicacion", () => {
     const filePath = join(directory, "workouts.json");
 
     await appendWorkoutRecord(makeRecord(), filePath);
+
     await expect(
       appendWorkoutRecord(makeRecord({ workoutDate: "2026-11-10" }), filePath),
     ).resolves.toBe(2);

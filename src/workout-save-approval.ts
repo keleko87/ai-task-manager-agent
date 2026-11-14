@@ -7,10 +7,8 @@ export interface WorkoutApprovalRequest {
 
 export interface WorkoutApprovalState {
   approve(request: WorkoutApprovalRequest): void;
-  reject(
-    request: WorkoutApprovalRequest,
-    options: { message: string },
-  ): void;
+
+  reject(request: WorkoutApprovalRequest, options: { message: string }): void;
 }
 
 export async function confirmAndResumeWorkoutSave<Result>(options: {
@@ -25,11 +23,14 @@ export async function confirmAndResumeWorkoutSave<Result>(options: {
     options.state.reject(options.approval, {
       message: "El usuario cancelo o rechazo el guardado.",
     });
+
     return { approved: false };
   }
 
   options.context.approvedWorkoutJson = JSON.stringify(options.workout);
+
   options.state.approve(options.approval);
+
   try {
     return { approved: true, result: await options.resume() };
   } finally {

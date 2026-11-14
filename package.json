@@ -12,19 +12,31 @@
     "test:coverage": "vitest run --coverage",
     "agent:test": "npm run build && node dist/test-workout-agent.js",
     "agent:save": "npm run build && node dist/save-workout-flow.js",
-    "agent:eval:ollama": "npm run build && node dist/save-workout-flow.js"
+    "agent:eval:ollama": "npm run build && node dist/save-workout-flow.js",
+    "notion:read-test-page": "npm run build && node dist/notion/notion-read-cli.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@babel/core": "^7.29.13",
+    "@babel/eslint-parser": "^7.29.13",
+    "@babel/plugin-syntax-typescript": "^7.29.7",
+    "@stylistic/eslint-plugin": "^5.10.0",
     "@types/node": "^26.6.6",
     "@vitest/coverage-v8": "^5.1.0",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.7",
+    "prettier": "^3.10.1",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.4.0",
+    "@napi-rs/keyring": "^2.1.2",
     "@openai/agents": "^0.21.0",
     "zod": "^4.6.7"
   }

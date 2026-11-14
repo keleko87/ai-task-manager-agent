@@ -12,6 +12,7 @@ import { confirmAndResumeWorkoutSave } from "./workout-save-approval.js";
 async function askForApproval(): Promise<boolean> {
   const readline = createInterface({ input: stdin, output: stdout });
   const abortController = new AbortController();
+
   readline.on("SIGINT", () => abortController.abort());
 
   try {
@@ -19,11 +20,13 @@ async function askForApproval(): Promise<boolean> {
       "¿Autorizas guardar este entrenamiento? [s/N] ",
       { signal: abortController.signal },
     );
+
     return /^(s|si|sí)$/i.test(answer.trim());
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       return false;
     }
+
     throw error;
   } finally {
     readline.close();
@@ -32,11 +35,14 @@ async function askForApproval(): Promise<boolean> {
 
 async function main(): Promise<void> {
   const originalText = process.argv.slice(2).join(" ").trim();
+
   if (!originalText) {
     console.error(
       'Uso: npm run agent:save -- "Hoy hice sentadillas: 3 series de 8 repeticiones"',
     );
+
     process.exitCode = 1;
+
     return;
   }
 
@@ -61,42 +67,62 @@ async function main(): Promise<void> {
   };
 
   try {
-    const firstResult = await runner.run(WorkoutAgent, originalText, { context });
+    const firstResult = await runner.run(WorkoutAgent, originalText, {
+      context,
+    });
     const approval = firstResult.interruptions.find(
       (item) => item.name === "saveWorkout",
     );
 
     if (!approval) {
-      console.error("El agente no solicito guardar. No se escribio ningun archivo.");
+      console.error(
+        "El agente no solicito guardar. No se escribio ningun archivo.",
+      );
+
       if (typeof firstResult.finalOutput === "string") {
         console.error("Respuesta del agente:", firstResult.finalOutput);
       }
+
       process.exitCode = 1;
+
       return;
     }
 
     let workout: WorkoutExtraction;
+
     try {
       workout = parseWorkoutToolArguments(approval.arguments ?? "");
     } catch (error) {
       firstResult.state.reject(approval, {
-        message: "Los argumentos de guardado eran invalidos; no se guardo nada.",
+        message:
+          "Los argumentos de guardado eran invalidos; no se guardo nada.",
       });
+
       if (error instanceof SyntaxError) {
-        throw new Error("saveWorkout recibio JSON invalido; no se guardo nada.", {
-          cause: error,
-        });
+        throw new Error(
+          "saveWorkout recibio JSON invalido; no se guardo nada.",
+          {
+            cause: error,
+          },
+        );
       }
+
       if (error instanceof ZodError) {
-        throw new Error("Los datos de saveWorkout no superaron Zod; no se guardo nada.", {
-          cause: error,
-        });
+        throw new Error(
+          "Los datos de saveWorkout no superaron Zod; no se guardo nada.",
+          {
+            cause: error,
+          },
+        );
       }
+
       throw error;
     }
 
     console.log("\nVista previa del entrenamiento:");
+
     console.dir({ ...workout, originalText }, { depth: null, colors: true });
+
     console.log(`Archivo de destino: ${context.storagePath}`);
 
     const saveResult = await confirmAndResumeWorkoutSave({
@@ -113,13 +139,16 @@ async function main(): Promise<void> {
 
     if (!saveResult.approved) {
       console.log("Cancelado. No se guardo ningun entrenamiento.");
+
       return;
     }
 
     const savedResult = saveResult.result;
+
     if (typeof savedResult.finalOutput !== "string") {
       throw new Error("La herramienta no confirmo el guardado.");
     }
+
     console.log(savedResult.finalOutput);
   } finally {
     await localProvider.close();
@@ -128,5 +157,6 @@ async function main(): Promise<void> {
 
 main().catch((error: unknown) => {
   console.error("No se pudo completar el flujo de guardado:", error);
+
   process.exitCode = 1;
 });

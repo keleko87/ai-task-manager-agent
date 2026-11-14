@@ -64,3 +64,143 @@ WORKOUTS_FILE=.tmp/ollama-eval.json npm run agent:eval:ollama -- "Hoy hice senta
 ```
 
 Este eval opcional requiere Ollama local y `qwen3:4b`; solicita confirmacion antes de escribir en el archivo temporal. `npm test` no depende del modelo.
+
+## Adaptador de entrenamientos para Notion (preparación, sin conexión local)
+
+El destino exclusivo está fijado en `src/notion/notion-read-service.ts`:
+`411f963e-438f-81d7-ac61-d59994bd83b0`. Ninguna función del dominio acepta
+un ID de página del modelo. `saveWorkout` y `data/workouts.json` siguen
+independientes: este adaptador no los importa ni modifica.
+
+- `workoutToNotionBlocks(input, options)` valida con una extensión del esquema
+  Zod existente. Devuelve bloques de dominio `{ type, text }`, Markdown para
+  un futuro transporte MCP, fecha normalizada y marcador SHA-256 versionado.
+  No son objetos de la API REST de bloques de Notion. `individualSets` permite
+  conservar repeticiones, carga y observaciones distintas por serie. Los datos
+  desconocidos se muestran como tales; la nota original se conserva literalmente.
+- `createWorkoutReader(transport).read()` llama a `fetchPage` exclusivamente con
+  el ID fijo. Exige `{ id, title, content, complete: true, revision }` y rechaza
+  otra página o una lectura incompleta. El transporte real deberá autenticar,
+  resolver paginación y bloques desconocidos, y proporcionar una revisión real.
+  No debe inventar `complete` ni una revisión.
+- `createNotionWorkoutService({ reader, writer? }).preview(...)` valida, lee y
+  comprueba duplicados. Requiere una decisión de ubicación explícita
+  `append-page-end`; sin ella devuelve `needs-clarification`. La propuesta es
+  añadir al final de la página, fuera de la tabla semanal, pendiente de decisión.
+  Los registros antiguos de la misma fecha requieren revisión manual.
+- Tras mostrar **exactamente** `preview.markdown`, destino y ubicación, la interfaz
+  de confianza recoge una autorización específica. Solo entonces llama a
+  `service.saveWorkoutToNotion({ previewId, digest, approved: true })`.
+  La autorización caduca en diez minutos y se consume una sola vez. `cancel`
+  la invalida. El contenido aprobado se mantiene internamente, separado de la
+  copia entregada a la interfaz. No se registran herramientas MCP genéricas ni
+  este permiso como herramientas del modelo.
+- `writer.append({ pageId, markdown, expectedRevision })` es una capacidad del
+  host, ausente por defecto. Debe rechazar revisiones cambiadas y errores remotos;
+  resolver tareas asíncronas antes de terminar. No puede reemplazar contenido.
+  El servicio relee justo antes del append, comprueba duplicados y cambios, y
+  verifica después el marcador y la conservación del contenido anterior. Un
+  fallo de verificación deja el estado remoto incierto y exige inspección antes
+  de reintentar; nunca devuelve `saved` en ese caso.
+
+La exclusión local evita dos guardados simultáneos en una instancia. La lectura
+previa por sí sola no garantiza atomicidad entre procesos: un transporte real
+necesita control de concurrencia o rechazar el guardado si no puede cumplir el
+contrato `expectedRevision`.
+
+Estado previo a la conexión real: faltaban login OAuth, almacén de credenciales
+y transporte MCP local. La sección siguiente describe la implementación actual. El conector de Notion
+de la conversación sí permitió una lectura de la página: contiene el registro
+semanal aprobado del 7 de noviembre de 2026, una tabla de seis columnas y tres
+filas de ejercicios. Esa lectura devuelve Markdown, no IDs individuales de
+bloques, y no demuestra el OAuth de esta aplicación. No se ha conectado el
+adaptador a ningún escritor real ni realizado pruebas remotas de escritura.
+
+Siguiente paso: implementar y verificar OAuth y una lectura MCP local con el
+wrapper fijo; confirmar la ubicación de nuevos registros; preparar un
+entrenamiento con fecha exacta y mostrar su vista previa. Una prueba real de
+escritura requiere una autorización posterior específica, nueva comprobación de
+duplicados y verificación del resultado. No ejecutar escrituras hasta entonces.
+
+Los tests de `src/notion/notion-workout.test.ts` usan exclusivamente mocks.
+Build y tests verificados con Node 24.22.2 (Node 18 no ejecuta esta versión de
+Vitest). El único eval existente, `agent:eval:ollama`, requiere Ollama y ejecuta
+el flujo local con aprobación; no es un eval offline y no se ejecutó para esta
+preparación. No hay un runner de evals offline adicional en el proyecto.
+
+## Lectura local por MCP oficial de Notion
+
+Implementación contrastada con `@openai/agents` 0.21.0 y
+`@modelcontextprotocol/client` 2.4.0 instalados: `MCPServerStreamableHttp`
+acepta `authProvider`; el proveedor implementa la interfaz OAuth del cliente MCP.
+El endpoint fijo es `https://mcp.notion.com/mcp`.
+
+```sh
+npm run notion:read-test-page
+# Si solicita consentimiento, ejecuta desde una terminal interactiva:
+npm run notion:read-test-page -- --authorize
+```
+
+Usa Node 22 o superior (verificado con 24.22.2). Sin `--authorize`, el programa
+puede usar una autorización ya guardada, pero se detiene si necesita navegador.
+Con `--authorize`, muestra el destino, el servidor de autorización y el scope
+recibido; solicita confirmación antes de abrir el navegador. Revisa el workspace
+y los permisos en la pantalla de Notion y cancela si no son adecuados. El scope
+observado en la primera conexión fue `default`: no equivale a permiso de solo
+lectura ni a limitar OAuth a una página. El MCP oficial puede actuar con los
+permisos de la cuenta. La restricción de página y lectura pertenece a este código.
+
+El cliente MCP realiza discovery, registro dinámico, PKCE e intercambio de código;
+el callback escucha exclusivamente en `127.0.0.1:43871/oauth/callback`, valida
+`state` y caduca en tres minutos. El SDK valida el issuer recibido y gestiona
+renovación/invalidation de tokens. Si OAuth está revocado o el refresh falla,
+puede ser necesario revisar y autorizar otra vez. Un administrador puede tener
+que permitir el cliente o su redirect URL.
+
+`@napi-rs/keyring` guarda tokens, registro del cliente, verifier y discovery en el
+llavero macOS, servicio `ai-task-manager-agent.notion-readonly`. No se escriben
+credenciales en archivos del proyecto, variables `.env` ni logs. Para revocar,
+retira la conexión en Notion y elimina las entradas de ese servicio en Acceso a
+Llaveros. Si macOS pide acceso al llavero, requiere intervención del usuario.
+Los errores de terminal se resumen sin volcar excepciones, códigos ni tokens.
+
+`notion-mcp-read.ts` construye el servidor sin adjuntarlo a WorkoutAgent.
+Solo utiliza `notion-fetch`, con ID constante, a través de `createWorkoutReader`.
+Valida identidad, URL, contenido, indicadores de truncamiento y bloques
+desconocidos. La fecha de edición o timestamp del fetch sirve como revisión de
+lectura; no es una garantía de escritura condicional. No se instancia ningún
+transporte de escritura y no se llaman herramientas de modificación. El filtro
+de herramientas del SDK no sustituye la restricción del wrapper.
+
+Primera prueba desde Node: discovery/registro alcanzaron el servidor oficial,
+que devolvió `https://mcp.notion.com/authorize` y scope `default`. Se detuvo antes
+de abrir navegador porque falta autorización manual. **No hubo lectura real de
+la página desde Node todavía**; la lectura anterior mediante el conector del chat
+no cuenta como verificación local. Después de autorizar, el comando debe mostrar
+`Lectura real verificada`, título, ID, revisión y contenido. Si el formato real
+no permite verificar integridad, falla sin simular éxito.
+
+Antes de considerar escrituras siguen pendientes: completar OAuth manual,
+verificar esa lectura local, confirmar ubicación, revisar soporte de concurrencia
+del transporte y solicitar autorización específica sobre una vista previa exacta.
+
+### Verificación local completada — 14 de noviembre de 2026
+
+OAuth completado mediante consentimiento en navegador. El comando Node local
+terminó con código 0 y mostró `Lectura real verificada` para el ID exclusivo
+`411f963e-438f-81d7-ac61-d59994bd83b0`, título
+`🧪 AI Task Manager — Pruebas de notas de voz (noviembre 2026)` y revisión
+`2026-11-07T21:00:56.396Z`. Se leyó la tabla semanal aprobada del 7 de noviembre,
+con tres ejercicios. No se realizaron escrituras en Notion. Esta verificación
+sustituye el estado pendiente de consentimiento descrito anteriormente.
+
+## Formato y legibilidad
+
+`npm run lint` comprueba todos los archivos TypeScript y JavaScript del proyecto;
+`npm run lint:fix` aplica automáticamente el formato. ESLint integra Prettier,
+indentación de dos espacios, ancho preferido de 80 columnas, llaves obligatorias,
+líneas en blanco entre sentencias (excepto imports y declaraciones consecutivas)
+y separación entre miembros de clases. Se excluyen dependencias, compilados,
+coverage y datos locales. El parser Babel evita la incompatibilidad declarada del
+parser typescript-eslint con TypeScript 7; la comprobación de tipos sigue siendo
+responsabilidad de `npm run build`.

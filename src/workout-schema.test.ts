@@ -84,6 +84,7 @@ describe("WorkoutExtractionSchema", () => {
     expect(() =>
       WorkoutExtractionSchema.parse({ workoutDate: 123, exercises: [] }),
     ).toThrow();
+
     expect(() =>
       WorkoutExtractionSchema.parse({ exercises: [], unexpected: true }),
     ).toThrow();
@@ -92,7 +93,9 @@ describe("WorkoutExtractionSchema", () => {
 
 describe("parseWorkoutToolArguments", () => {
   it("analiza JSON y devuelve datos normalizados por Zod", () => {
-    expect(parseWorkoutToolArguments('{"exercises":[{"name":"press"}]}')).toEqual({
+    expect(
+      parseWorkoutToolArguments('{"exercises":[{"name":"press"}]}'),
+    ).toEqual({
       workoutDate: null,
       exercises: [
         {
@@ -107,7 +110,8 @@ describe("parseWorkoutToolArguments", () => {
   });
 
   it("rechaza JSON malformado y JSON con datos invalidos", () => {
-    expect(() => parseWorkoutToolArguments("{" )).toThrow(/JSON invalido/);
+    expect(() => parseWorkoutToolArguments("{")).toThrow(/JSON invalido/);
+
     expect(() =>
       parseWorkoutToolArguments('{"exercises":[{"sets":"muchas"}]}'),
     ).toThrow();
