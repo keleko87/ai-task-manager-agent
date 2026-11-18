@@ -1,392 +1,402 @@
 # AI Task Manager Agent
 
-Asistente personal de IA para gestion de tareas, desarrollado con Node.js y TypeScript. Incluye `WorkoutAgent`, conectado al modelo local `qwen3:4b` de Ollama mediante la API Chat Completions compatible con OpenAI, y validacion Zod local. No conecta Notion, Gmail ni WhatsApp.
+Agente TypeScript que interpreta entrenamientos con Qwen3 4B mediante Ollama,
+valida los datos con Zod y permite guardarlos en JSON local o en una página de
+pruebas de Notion. Utiliza OpenAI Agents SDK y Notion MCP oficial con OAuth.
+El usuario elige un único destino y aprueba el contenido antes de guardar.
+No incluye captura de audio, Gmail ni WhatsApp.
 
-## Requisitos
+**Estado actual:** Qwen3 mediante Ollama, validación Zod y orquestador operativo;
+OAuth, lectura y primera escritura controlada de Notion MCP ya verificados.
+El flujo unificado está implementado y la escritura en Notion sigue deshabilitada
+por defecto. Última validación funcional conocida: 131 tests y dos evals reales
+de extracción aprobados.
 
-- npm
-- Node.js 22 o superior
-- Ollama ejecutandose localmente en `http://localhost:11434` con el modelo `qwen3:4b` disponible
+## Requisitos e instalación
 
-## Instalacion y ejecucion
+- Node.js compatible con las dependencias instaladas: recomendado **24.22.2**, con
+  el que se ha validado el proyecto. Vitest requiere Node 22.12 o superior dentro
+  de la rama 22; Node 18 no sirve para esta batería.
+- npm.
+- Ollama en `http://localhost:11434`, con `qwen3:4b`, para los comandos `agent:*`.
+- macOS y acceso a su llavero, conexión a Internet y permisos en la página de
+  pruebas para los comandos Notion. Los tests con mocks no requieren esto.
+- Terminal interactiva para seleccionar destino, aclarar datos y aprobar escrituras.
+
+Desde la raíz del repositorio (`ai-task-manager-agent/`):
 
 ```sh
-npm install
+npm ci
+npm run build
 npm start
 ```
 
-`npm run start` compila TypeScript y ejecuta el mensaje inicial. Para compilar sin ejecutar la aplicacion, usa `npm run build`.
+`npm ci` instala las versiones del lockfile. `npm install` es la alternativa si
+necesitas actualizar dependencias. `npm start` solo compila y muestra el mensaje
+inicial; para interpretar entrenamientos usa `agent:workout` o `agent:test`.
+No necesitas una API key de OpenAI: el proveedor usa la API compatible de Ollama
+en `http://localhost:11434/v1`, con el valor ficticio `ollama` y trazado desactivado.
 
-## Probar WorkoutAgent
+## Referencia completa de comandos npm
 
-Con Ollama ejecutandose localmente y `qwen3:4b` descargado, ejecuta:
+Esta tabla cubre los **15 scripts** definidos en `package.json`. El separador
+`--` entrega los argumentos al programa, en lugar de a npm. Encierra el texto del
+entrenamiento entre comillas. Los comandos de agente y Notion compilan antes de
+arrancar; `lint` y los tests trabajan directamente sobre los fuentes.
+Los scripts sin `"Texto"` ni ruta en su invocación no requieren parámetros.
+Los ejemplos de guardado que siguen requieren una aprobación adicional; la
+sección de primera ejecución utiliza exclusivamente operaciones sin guardado.
+
+| Comando | Para qué sirve | Requisitos y efectos |
+| --- | --- | --- |
+| `npm run build` | Compila TypeScript a `dist/` y comprueba tipos. | Sin Ollama ni Notion; genera archivos compilados. |
+| `npm start` | Compila y ejecuta el mensaje inicial de `src/index.ts`. | No interpreta ni guarda entrenamientos. |
+| `npm test` | Ejecuta Vitest una vez. | Tests con mocks y archivos temporales; sin servicios reales. |
+| `npm run test:watch` | Mantiene Vitest observando cambios. | Interactivo; `Ctrl+C` termina. |
+| `npm run test:coverage` | Ejecuta los tests y genera cobertura. | Sin servicios reales; informe en `coverage/`. |
+| `npm run lint` | Comprueba formato y reglas ESLint. | No corrige los fuentes. |
+| `npm run lint:fix` | Aplica las correcciones automáticas de ESLint/Prettier. | Modifica los fuentes; revisar el diff. |
+| `npm run agent:test -- "Texto"` | Interpreta y valida un entrenamiento sin guardarlo. | Ollama; solo extracción. |
+| `npm run agent:workout -- "Texto"` | Flujo unificado con elección local/Notion y aprobación. | Ollama; local puede guardar tras aprobar; Notion es vista previa por defecto. |
+| `npm run agent:save -- "Texto"` | Flujo local legado mediante function calling. | Ollama; escribe JSON solo tras confirmar con `s`, `si` o `sí`. |
+| `npm run agent:eval:extraction` | Eval real de extracción de series comunes y variables. | Ollama; no guarda ni contacta con Notion. |
+| `npm run agent:eval:ollama -- "Texto"` | Eval manual legado del function calling y guardado local. | Es un alias de `agent:save`; puede escribir JSON tras aprobar. |
+| `npm run notion:read-test-page` | Lee la página autorizada y muestra su contenido. | OAuth, llavero y red; sin Ollama ni escrituras remotas. |
+| `npm run notion:preview-workout -- examples/notion-workout.json` | Valida un JSON, lee duplicados y muestra la propuesta. | OAuth, llavero y red; no escribe por defecto. |
+| `npm run notion:verify-workout -- examples/notion-workout.json` | Verifica un registro ya existente usando el JSON esperado. | OAuth, llavero y red; exclusivamente lectura. |
+
+## Guía rápida — Primera ejecución
+
+1. Instala los requisitos anteriores. Desde `ai-task-manager-agent/`, comprueba
+   Node y descarga las dependencias del proyecto:
+
+   ```sh
+   node --version
+   npm ci
+   npm run build
+   ```
+
+2. Arranca Ollama en otra terminal y déjala abierta:
+
+   ```sh
+   ollama serve
+   ```
+
+   Si la aplicación de Ollama ya está ejecutando el servicio, no lo arranques
+   otra vez. Un error de puerto ocupado suele indicar que ya está iniciado.
+
+3. En la terminal del proyecto, descarga el modelo si aún no está instalado y
+   comprueba que aparece en la lista:
+
+   ```sh
+   ollama pull qwen3:4b
+   ollama list
+   ```
+
+   `pull` necesita red y espacio para descargar el modelo. Después, la inferencia
+   usa el servicio local; no necesitas una cuenta ni una API key de OpenAI.
+
+4. Ejecuta una prueba de interpretación sin persistencia:
+
+   ```sh
+   npm run agent:test -- "Hoy hice press banca, tres series de diez con 60 kg"
+   ```
+
+   Debe mostrar los datos validados y la transcripción. Este comando no guarda
+   JSON ni conecta con Notion.
+
+5. Recorre el orquestador con un ejemplo ficticio y sin posibilidad de guardar:
+
+   ```sh
+   WORKOUTS_FILE=.tmp/primera-prueba.json npm run agent:workout -- "Hoy he hecho press banca inclinado. Primera serie, 35 kg y 8 repeticiones. Segunda serie, 32,5 kg y 8 repeticiones." --preview-only
+   ```
+
+   Escribe `local` cuando solicite el destino. Así no necesitas configurar Notion:
+   solo consulta la ruta local para detectar duplicados y muestra la vista previa.
+   El archivo no se crea ni se modifica. El resultado esperado es `preview-only`
+   cuando no hay duplicados ni aclaraciones pendientes. La vista previa debe
+   conservar las dos series, 8 × 35 kg y 8 × 32,5 kg, y la transcripción original.
+   Si faltan datos imprescindibles, responde a la aclaración o pulsa Enter para
+   cancelar. `hoy` se resuelve con la fecha de ejecución en `Europe/Madrid`.
+
+6. Opcionalmente, configura o comprueba Notion exclusivamente en lectura:
+
+   ```sh
+   npm run notion:read-test-page -- --authorize
+   ```
+
+   Revisa el alcance en terminal y navegador antes de conceder permisos. Tras
+   autenticarte, puedes repetir sin `--authorize`. Para probar el orquestador
+   contra Notion, vuelve a ejecutar el comando `npm run agent:workout` del paso 5,
+   conservando `--preview-only`, y elige `notion` cuando solicite el destino.
+   Leerá duplicados y preparará la propuesta, sin escribir.
+
+`npm start` no sustituye a estos pasos: solo muestra el mensaje inicial.
+La primera prueba segura no necesita ninguna opción de habilitación de escritura.
+
+## Modos de ejecución
+
+| Modo | Cómo ejecutarlo | Qué puede modificar |
+| --- | --- | --- |
+| Solo interpretación | `npm run agent:test -- "Texto"` | Ningún entrenamiento; usa Ollama. |
+| Vista previa del orquestador | `npm run agent:workout -- "Texto" --preview-only` | Ningún entrenamiento en local ni en Notion; exige elegir destino y consulta duplicados. |
+| Guardado local | `npm run agent:workout -- "Texto"`, elegir `local` y aprobar el digest | Solo el JSON seleccionado; nunca Notion. |
+| Vista previa Notion desde JSON | `npm run notion:preview-workout -- examples/notion-workout.json` | Ningún bloque remoto; solo lectura y propuesta. |
+| Escritura Notion desde texto | `npm run agent:workout -- "Texto" --enable-one-notion-write`, elegir `notion` y aprobar el digest | Un registro dentro de «Registros de prueba» de la página autorizada. |
+| Escritura Notion desde JSON | `npm run notion:preview-workout -- ruta/al/entrenamiento.json --enable-one-write` y aprobar el digest | Un registro en esa misma sección y página. |
+| Verificación Notion | `npm run notion:verify-workout -- examples/notion-workout.json` | Ningún contenido remoto; comprueba un registro existente. |
+
+Las opciones de escritura solo habilitan llegar a la confirmación; no la
+sustituyen. `--preview-only` prevalece sobre la habilitación de Notion. Las
+operaciones locales de compilación, instalación y cobertura pueden generar
+archivos de desarrollo, pero no guardan entrenamientos.
+
+## Flujo unificado y autorización
 
 ```sh
-npm run agent:test -- "Hoy he hecho press banca, tres series de diez repeticiones con sesenta kilos. Despues hice sentadillas, cuatro series de ocho con ochenta kilos"
+npm run agent:workout -- "Hoy hice press banca: tres series de diez con 60 kg"
 ```
 
-`WorkoutAgent` recibe la descripcion en lenguaje natural y extrae la fecha y cada ejercicio con series, repeticiones, peso y observaciones. Conserva los nombres de ejercicios y las fechas relativas (por ejemplo, `hoy`) tal como se escribieron. Tambien interpreta cantidades expresadas con palabras en espanol, como `tres series de diez repeticiones`.
+1. El agente de extracción interpreta y TypeScript valida con Zod.
+2. Si falta fecha, nombre de ejercicio u otro dato imprescindible, pide aclaración.
+   `hoy` y `ayer` se resuelven con la fecha de ejecución en `Europe/Madrid`.
+3. Escribe `local` o `notion`; Enter o un destino no reconocido cancela.
+4. Se comprueban duplicados en ese destino y se muestra la propuesta.
+5. Si el guardado está habilitado, escribe exactamente `GUARDAR <digest mostrado>`.
+   `EDITAR` invalida el permiso y vuelve a pedir datos; cualquier otra respuesta cancela.
+6. La herramienta guarda una sola vez y el servicio verifica el resultado.
 
-El agente solicita JSON normal en lugar de depender de la salida estructurada del SDK, cuya compatibilidad puede variar entre servidores compatibles con OpenAI. La aplicacion analiza la respuesta y la valida localmente con Zod antes de mostrar la vista previa. Los datos ausentes u omitidos se representan como `null`, y el texto original se incluye sin alteraciones.
+La transcripción inicial se conserva íntegra en este flujo, sin trim ni
+reescritura del modelo. Las aclaraciones son contexto explícito para reinterpretar
+los campos. Hay un máximo de cinco iteraciones. Los valores no indicados quedan
+como desconocidos: Zod valida su forma, pero debes revisar la fidelidad al texto.
+El esquema admite `sessionName` e `individualSets` opcionales, sin invalidar los
+JSON anteriores. Las series variables se guardan sin promediarlas.
 
-La prueba usa la API Chat Completions compatible con OpenAI en `http://localhost:11434/v1`, configura `qwen3:4b`, utiliza el valor ficticio `ollama` como API key y desactiva el trazado del Agents SDK. No necesita una clave real de OpenAI ni conecta servicios externos.
+| Opción de `agent:workout` | Comportamiento |
+| --- | --- |
+| `--preview-only` | Deshabilita escrituras en ambos destinos. Prevalece sobre cualquier habilitación. |
+| `--enable-one-notion-write` | Permite llegar a la aprobación de un único guardado Notion; no elige el destino ni aprueba nada por sí sola. |
+| Sin opciones | Local requiere aprobación; Notion permanece en vista previa. |
 
-## Guardar un entrenamiento
+Nunca se guarda en ambos destinos ni se hace fallback a JSON cuando falla Notion.
+Una terminal no interactiva no selecciona destino ni aprueba guardados.
 
-`npm run agent:save -- "...descripcion..."` inicia el flujo completo. WorkoutAgent interpreta el texto y solicita la herramienta `saveWorkout` mediante function calling. El Agents SDK pausa la ejecucion porque la herramienta tiene `needsApproval: true`. La aplicacion valida los argumentos con Zod, muestra una vista previa y solicita confirmacion en la terminal. Solo despues de una respuesta `s` o `si` TypeScript aprueba la interrupcion y reanuda el runner.
+## Guardado JSON local y comando legado
 
-La herramienta comprueba ademas un permiso de un solo uso en el contexto de TypeScript antes de escribir. Si se rechaza o cancela la confirmacion, no se reanuda la herramienta y no se modifica ningun archivo. Los entrenamientos se guardan y acumulan en `data/workouts.json`, junto con el texto original y la fecha local de guardado. El archivo y su carpeta se crean automaticamente; los datos existentes se validan antes de anadir otro registro. El archivo de datos se excluye de Git.
+El archivo predeterminado es `data/workouts.json`, excluido de Git. Se validan
+los registros anteriores antes de añadir otro. La clave local incluye fecha,
+campos normalizados de ejercicios, sesión y series individuales cuando existen;
+ignora la transcripción y `savedAt`. El flujo legado puede aceptar fecha `null`;
+el flujo unificado pide una fecha antes de preparar un guardado.
 
-Para probar el flujo sin dejar un entrenamiento de prueba en el archivo habitual, puedes indicar un destino temporal dentro del proyecto:
+`WORKOUTS_FILE` cambia únicamente el destino local. Una ruta relativa se resuelve
+contra el directorio desde el que ejecutas el comando:
 
 ```sh
-WORKOUTS_FILE=.tmp/workouts-test.json npm run agent:save -- "Hoy hice sentadillas: tres series de ocho repeticiones con 60 kg"
+# Flujo unificado: selecciona local y revisa el digest antes de aprobar.
+WORKOUTS_FILE=.tmp/workouts-test.json npm run agent:workout -- "Hoy hice remo: tres series de ocho con 40 kg"
+
+# Flujo legado: confirma con s/si/sí; Enter o n cancela.
+WORKOUTS_FILE=.tmp/workouts-test.json npm run agent:save -- "Hoy hice remo: tres series de ocho con 40 kg"
 ```
 
-Confirma con `s` para guardar o responde `n`/pulsa Enter para cancelar. `npm run agent:test` sigue disponible para probar solo la extraccion; `npm run start` y `npm run build` no cambian.
+El comando legado mantiene su comportamiento: normaliza el espacio exterior de
+la entrada con `trim()` y usa la interrupción `needsApproval` del Agents SDK.
+Ambos flujos reutilizan `saveWorkout` y su permiso TypeScript consumible. El nuevo
+adaptador local relee el JSON para verificar el guardado. Notion es independiente.
 
-## Pruebas automatizadas
+## Notion: acceso y lectura
 
-```sh
-npm test
-npm run test:watch
-npm run test:coverage
-```
-
-Vitest ejecuta los tests unitarios del esquema/parser, la persistencia JSON en directorios temporales, los errores de datos y escritura, la deduplicacion, y el permiso de un solo uso de `saveWorkout`. Los tests habituales no llaman a Ollama y nunca usan `data/workouts.json`.
-
-La clave de duplicado se calcula con la fecha del entrenamiento y los campos normalizados de sus ejercicios; ignora el texto original y la hora de guardado. Dos registros iguales para la misma fecha se consideran duplicados, mientras que los mismos ejercicios en fechas distintas se permiten. Si la fecha es desconocida (`null`), solo se bloquea otro registro con fecha desconocida y el mismo contenido normalizado.
-
-Para verificar manualmente function calling real con Qwen3 y autorizar el guardado desde la terminal:
+Destino exclusivo fijado en TypeScript:
+[AI Task Manager — Pruebas de notas de voz (noviembre 2026)](https://app.notion.com/p/411f963e438f81d7ac61d59994bd83b0).
+ID: `411f963e-438f-81d7-ac61-d59994bd83b0`. No se acepta otro ID desde el modelo
+ni desde los comandos.
 
 ```sh
-WORKOUTS_FILE=.tmp/ollama-eval.json npm run agent:eval:ollama -- "Hoy hice sentadillas: tres series de ocho repeticiones con 60 kg"
-```
-
-Este eval opcional requiere Ollama local y `qwen3:4b`; solicita confirmacion antes de escribir en el archivo temporal. `npm test` no depende del modelo.
-
-## Adaptador de entrenamientos para Notion (preparación, sin conexión local)
-
-El destino exclusivo está fijado en `src/notion/notion-read-service.ts`:
-`411f963e-438f-81d7-ac61-d59994bd83b0`. Ninguna función del dominio acepta
-un ID de página del modelo. `saveWorkout` y `data/workouts.json` siguen
-independientes: este adaptador no los importa ni modifica.
-
-- `workoutToNotionBlocks(input, options)` valida con una extensión del esquema
-  Zod existente. Devuelve bloques de dominio `{ type, text }`, Markdown para
-  un futuro transporte MCP, fecha normalizada y marcador SHA-256 versionado.
-  No son objetos de la API REST de bloques de Notion. `individualSets` permite
-  conservar repeticiones, carga y observaciones distintas por serie. Los datos
-  desconocidos se muestran como tales; la nota original se conserva literalmente.
-- `createWorkoutReader(transport).read()` llama a `fetchPage` exclusivamente con
-  el ID fijo. Exige `{ id, title, content, complete: true, revision }` y rechaza
-  otra página o una lectura incompleta. El transporte real deberá autenticar,
-  resolver paginación y bloques desconocidos, y proporcionar una revisión real.
-  No debe inventar `complete` ni una revisión.
-- `createNotionWorkoutService({ reader, writer? }).preview(...)` valida, lee y
-  comprueba duplicados. Requiere una decisión de ubicación explícita
-  `append-page-end`; sin ella devuelve `needs-clarification`. La propuesta es
-  añadir al final de la página, fuera de la tabla semanal, pendiente de decisión.
-  Los registros antiguos de la misma fecha requieren revisión manual.
-- Tras mostrar **exactamente** `preview.markdown`, destino y ubicación, la interfaz
-  de confianza recoge una autorización específica. Solo entonces llama a
-  `service.saveWorkoutToNotion({ previewId, digest, approved: true })`.
-  La autorización caduca en diez minutos y se consume una sola vez. `cancel`
-  la invalida. El contenido aprobado se mantiene internamente, separado de la
-  copia entregada a la interfaz. No se registran herramientas MCP genéricas ni
-  este permiso como herramientas del modelo.
-- `writer.append({ pageId, markdown, expectedRevision })` es una capacidad del
-  host, ausente por defecto. Debe rechazar revisiones cambiadas y errores remotos;
-  resolver tareas asíncronas antes de terminar. No puede reemplazar contenido.
-  El servicio relee justo antes del append, comprueba duplicados y cambios, y
-  verifica después el marcador y la conservación del contenido anterior. Un
-  fallo de verificación deja el estado remoto incierto y exige inspección antes
-  de reintentar; nunca devuelve `saved` en ese caso.
-
-La exclusión local evita dos guardados simultáneos en una instancia. La lectura
-previa por sí sola no garantiza atomicidad entre procesos: un transporte real
-necesita control de concurrencia o rechazar el guardado si no puede cumplir el
-contrato `expectedRevision`.
-
-Estado previo a la conexión real: faltaban login OAuth, almacén de credenciales
-y transporte MCP local. La sección siguiente describe la implementación actual. El conector de Notion
-de la conversación sí permitió una lectura de la página: contiene el registro
-semanal aprobado del 7 de noviembre de 2026, una tabla de seis columnas y tres
-filas de ejercicios. Esa lectura devuelve Markdown, no IDs individuales de
-bloques, y no demuestra el OAuth de esta aplicación. No se ha conectado el
-adaptador a ningún escritor real ni realizado pruebas remotas de escritura.
-
-Siguiente paso: implementar y verificar OAuth y una lectura MCP local con el
-wrapper fijo; confirmar la ubicación de nuevos registros; preparar un
-entrenamiento con fecha exacta y mostrar su vista previa. Una prueba real de
-escritura requiere una autorización posterior específica, nueva comprobación de
-duplicados y verificación del resultado. No ejecutar escrituras hasta entonces.
-
-Los tests de `src/notion/notion-workout.test.ts` usan exclusivamente mocks.
-Build y tests verificados con Node 24.22.2 (Node 18 no ejecuta esta versión de
-Vitest). El único eval existente, `agent:eval:ollama`, requiere Ollama y ejecuta
-el flujo local con aprobación; no es un eval offline y no se ejecutó para esta
-preparación. No hay un runner de evals offline adicional en el proyecto.
-
-## Lectura local por MCP oficial de Notion
-
-Implementación contrastada con `@openai/agents` 0.21.0 y
-`@modelcontextprotocol/client` 2.4.0 instalados: `MCPServerStreamableHttp`
-acepta `authProvider`; el proveedor implementa la interfaz OAuth del cliente MCP.
-El endpoint fijo es `https://mcp.notion.com/mcp`.
-
-```sh
+# Usa credenciales existentes; se detiene si necesita consentimiento nuevo.
 npm run notion:read-test-page
-# Si solicita consentimiento, ejecuta desde una terminal interactiva:
+
+# Revisa el alcance y abre el navegador solo después de confirmar.
 npm run notion:read-test-page -- --authorize
 ```
 
-Usa Node 22 o superior (verificado con 24.22.2). Sin `--authorize`, el programa
-puede usar una autorización ya guardada, pero se detiene si necesita navegador.
-Con `--authorize`, muestra el destino, el servidor de autorización y el scope
-recibido; solicita confirmación antes de abrir el navegador. Revisa el workspace
-y los permisos en la pantalla de Notion y cancela si no son adecuados. El scope
-observado en la primera conexión fue `default`: no equivale a permiso de solo
-lectura ni a limitar OAuth a una página. El MCP oficial puede actuar con los
-permisos de la cuenta. La restricción de página y lectura pertenece a este código.
+El endpoint es `https://mcp.notion.com/mcp`. El cliente MCP realiza discovery,
+registro OAuth, PKCE e intercambio de código. El callback escucha en
+`127.0.0.1:43871/oauth/callback`, valida `state` y caduca en tres minutos.
+El SDK gestiona issuer y renovación de tokens; si se revocan, puede ser necesario
+reautorizar. Un administrador puede tener que permitir el cliente/redirect URL.
 
-El cliente MCP realiza discovery, registro dinámico, PKCE e intercambio de código;
-el callback escucha exclusivamente en `127.0.0.1:43871/oauth/callback`, valida
-`state` y caduca en tres minutos. El SDK valida el issuer recibido y gestiona
-renovación/invalidation de tokens. Si OAuth está revocado o el refresh falla,
-puede ser necesario revisar y autorizar otra vez. Un administrador puede tener
-que permitir el cliente o su redirect URL.
+El scope observado fue `default`: el consentimiento de Notion puede conceder
+más permisos que la lectura de esta página. Revisa cuenta, workspace y alcance
+en el navegador. La limitación de destino y operaciones pertenece al código.
+Los comandos de lectura no crean un escritor ni se adjuntan al modelo.
 
-`@napi-rs/keyring` guarda tokens, registro del cliente, verifier y discovery en el
-llavero macOS, servicio `ai-task-manager-agent.notion-readonly`. No se escriben
-credenciales en archivos del proyecto, variables `.env` ni logs. Para revocar,
+Las credenciales se guardan con `@napi-rs/keyring` en el llavero macOS, servicio
+`ai-task-manager-agent.notion-readonly`, no en Git, `.env` ni logs. Para revocar,
 retira la conexión en Notion y elimina las entradas de ese servicio en Acceso a
-Llaveros. Si macOS pide acceso al llavero, requiere intervención del usuario.
-Los errores de terminal se resumen sin volcar excepciones, códigos ni tokens.
+Llaveros. macOS puede solicitar permiso para acceder al llavero.
 
-`notion-mcp-read.ts` construye el servidor sin adjuntarlo a WorkoutAgent.
-Solo utiliza `notion-fetch`, con ID constante, a través de `createWorkoutReader`.
-Valida identidad, URL, contenido, indicadores de truncamiento y bloques
-desconocidos. La fecha de edición o timestamp del fetch sirve como revisión de
-lectura; no es una garantía de escritura condicional. No se instancia ningún
-transporte de escritura y no se llaman herramientas de modificación. El filtro
-de herramientas del SDK no sustituye la restricción del wrapper.
+## Notion desde un JSON: vista previa y escritura
 
-Primera prueba desde Node: discovery/registro alcanzaron el servidor oficial,
-que devolvió `https://mcp.notion.com/authorize` y scope `default`. Se detuvo antes
-de abrir navegador porque falta autorización manual. **No hubo lectura real de
-la página desde Node todavía**; la lectura anterior mediante el conector del chat
-no cuenta como verificación local. Después de autorizar, el comando debe mostrar
-`Lectura real verificada`, título, ID, revisión y contenido. Si el formato real
-no permite verificar integridad, falla sin simular éxito.
-
-Antes de considerar escrituras siguen pendientes: completar OAuth manual,
-verificar esa lectura local, confirmar ubicación, revisar soporte de concurrencia
-del transporte y solicitar autorización específica sobre una vista previa exacta.
-
-### Verificación local completada — 14 de noviembre de 2026
-
-OAuth completado mediante consentimiento en navegador. El comando Node local
-terminó con código 0 y mostró `Lectura real verificada` para el ID exclusivo
-`411f963e-438f-81d7-ac61-d59994bd83b0`, título
-`🧪 AI Task Manager — Pruebas de notas de voz (noviembre 2026)` y revisión
-`2026-11-07T21:00:56.396Z`. Se leyó la tabla semanal aprobada del 7 de noviembre,
-con tres ejercicios. No se realizaron escrituras en Notion. Esta verificación
-sustituye el estado pendiente de consentimiento descrito anteriormente.
-
-## Formato y legibilidad
-
-`npm run lint` comprueba todos los archivos TypeScript y JavaScript del proyecto;
-`npm run lint:fix` aplica automáticamente el formato. ESLint integra Prettier,
-indentación de dos espacios, ancho preferido de 80 columnas, llaves obligatorias,
-líneas en blanco entre sentencias (excepto imports y declaraciones consecutivas)
-y separación entre miembros de clases. Se excluyen dependencias, compilados,
-coverage y datos locales. El parser Babel evita la incompatibilidad declarada del
-parser typescript-eslint con TypeScript 7; la comprobación de tipos sigue siendo
-responsabilidad de `npm run build`.
-
-## Primera escritura controlada (preparada; no ejecutada)
-
-Esta sección sustituye la propuesta anterior de `append-page-end` y el requisito
-anterior de CAS: la ubicación ahora es `records-section-start`, inmediatamente
-debajo del encabezado único `## Registros de prueba`, antes de la tabla semanal.
-El transporte llama `notion-update-page` con `update_content`: sustituye solo ese
-encabezado por el mismo encabezado más los bloques nuevos. No reemplaza la página,
-no edita filas y no crea subpáginas. Los encabezados de registros son de nivel 3,
-y los de ejercicios de nivel 4. La transcripción se conserva en un bloque literal
-con fence de longitud suficiente para admitir backticks y etiquetas sin ejecutarlas.
-Los bloques devueltos por el conversor siguen siendo bloques de dominio; el
-transporte MCP recibe su representación en Markdown de Notion.
-
-Prepara un JSON con fecha ISO exacta usando `examples/notion-workout.json` como
-plantilla (contiene datos ficticios: sustituir antes de autorizar).
+El archivo [examples/notion-workout.json](examples/notion-workout.json) contiene
+datos ficticios y fecha ISO absoluta. Úsalo como plantilla y sustituye sus valores
+antes de registrar otro entrenamiento. No requiere Ollama:
 
 ```sh
-# Solo vista previa, puede leer Notion pero nunca escribe:
+# Solo prepara la vista previa; puede informar de duplicado si ya está registrado.
 npm run notion:preview-workout -- examples/notion-workout.json
-
-# Prueba real futura, solo tras decidir realizarla:
-npm run notion:preview-workout -- examples/notion-workout.json --enable-one-write
 ```
 
-El flag por sí solo no autoriza nada. El segundo comando requiere terminal
-interactiva y muestra destino, ubicación, Markdown exacto y digest. Para aprobar
-hay que escribir `GUARDAR <digest completo mostrado>`; cualquier otra respuesta
-cancela. TypeScript verifica el permiso asociado al contenido y destino guardados
-internamente, con caducidad de diez minutos y un único uso. Se conserva el OAuth,
-el llavero y el constructor de servidor existentes; el comando de lectura sigue
-anunciando solo fetch por defecto. No se conecta MCP a Qwen3. Si hace falta
-reautorizar, usa primero `notion:read-test-page -- --authorize`.
+El parámetro es la ruta a un JSON validado por Zod, con `workoutDate`, `exercises`
+y `originalText`, más `sessionName` opcional. Un ejercicio puede tener datos
+comunes (`sets`, `repetitions`, `weight`, `observations`) y/o `individualSets`.
+Revisa el ejemplo para ver los tipos y los campos null. En los comandos JSON usa
+fecha `YYYY-MM-DD`; no se proporciona una referencia para `hoy`/`ayer`.
 
-Se comprueban duplicados en la vista previa y justo antes de escribir. El servicio
-y el transporte releen el destino y comparan contenido/revisión. El MCP no admite
-un CAS atómico: otra edición puede ocurrir entre esa lectura y la escritura. El
-reemplazo de ancla mínimo limita el área afectada, pero no promete exclusión entre
-procesos. Evita editar la página durante la prueba. El bloqueo local solo cubre
-una instancia del servicio.
+Solo para una escritura real deliberada, usando un JSON revisado:
 
-Después de cualquier intento, incluso si hubo timeout, el servicio relee y exige
-que el contenido completo coincida con la inserción esperada y haya un único
-marcador. Si Notion normaliza el Markdown, puede quedar un registro correcto sin
-poder declararlo verificado: inspeccionar antes de preparar otro intento. No hay
-reintentos automáticos de escritura. Las tareas asíncronas o advertencias se
-consideran inciertas y se reconcilian mediante lectura; no se promete su finalización.
-Si también falla la lectura posterior, detenerse y repetir solo la lectura antes
-de volver a preparar una vista previa. Los registros legacy de la misma fecha
-siguen exigiendo revisión humana. `saveWorkout` y `data/workouts.json` son ajenos
-a este flujo.
+```sh
+npm run notion:preview-workout -- ruta/al/entrenamiento.json --enable-one-write
+```
 
-Validación de esta fase: build, lint y 83 tests con mocks. No se ejecutó el comando
-con escritura habilitada ni se modificó contenido de Notion.
+`--enable-one-write` pertenece al comando de JSON, no a `agent:workout`. Exige
+terminal interactiva y `GUARDAR <digest completo mostrado>`. Cualquier otra
+respuesta cancela. No admite `EDITAR`: corrige el archivo y genera otra propuesta.
+El permiso caduca a los diez minutos, vincula contenido, marcador, destino y
+ubicación, y solo se puede consumir una vez.
 
-## Verificación posterior estructural (sustituye la comparación textual exacta)
+Para guardar desde lenguaje natural, la habilitación separada es:
 
-La primera escritura mostró equivalencias de representación: `2026\-11\-14`
-se convirtió en `2026-11-14`, el marcador inline pasó de backticks a `<code>`,
-Notion compactó líneas vacías entre viñetas y cambió el lenguaje del fence de
-`text` a `txt`. La igualdad exacta anterior producía un falso error.
+```sh
+npm run agent:workout -- "El 18 de noviembre de 2026 hice remo: tres series de ocho con 40 kg" --enable-one-notion-write
+```
 
-`notion-record-verification.ts` compara bloques canónicos, conservando orden,
-nivel de encabezados, texto, series, cifras, cargas, notas y marcador único. Se
-admiten envolturas de rich text conocidas, escapes y entidades equivalentes,
-CRLF/LF y espacios no significativos fuera de bloques literales. La transcripción
-literal conserva espacios, saltos y signos (solo CRLF/LF son equivalentes).
-No se ignoran cambios de fecha, sesión, ejercicios, repeticiones, peso ni texto.
-Se delimita el registro bajo la sección autorizada; encontrar el marcador solo
-no basta. Después de una escritura también se compara el resto de la página con
-el estado previo canónico. Una comprobación aislada sin snapshot previo verifica
-el registro, pero no puede certificar retrospectivamente que nada más cambió.
+Selecciona `notion`, revisa todo y escribe la frase de aprobación con su digest.
+Los comandos no están autorizados por el mero hecho de aparecer en esta guía.
 
-Resultados explícitos:
-- `VERIFIED`: marcador único, ubicación y estructura/contenido coincidentes.
-- `NOT_FOUND`: lectura completa de la sección sin marcador esperado; no autoriza
-  automáticamente otro intento.
-- `INDETERMINATE`: contenido distinto, marcador duplicado, lectura incompleta,
-  timeout, falta de permisos u otra imposibilidad de verificar.
+Los bloques se insertan bajo el encabezado único **Registros de prueba**,
+antes de la tabla semanal, con ubicación `records-section-start`. Se conserva el
+encabezado mediante una actualización localizada. No se crean páginas hijas ni
+se modifican filas de la tabla aprobada del 7 de noviembre u otras páginas.
+Los duplicados se revisan en la propuesta y justo antes del intento. Los
+registros antiguos de la misma fecha sin marcador requieren revisión manual.
 
-El servicio conserva `saved` únicamente para `VERIFIED` y adjunta el resultado.
-Los otros estados generan `NotionVerificationError` con propiedad `verification`;
-no se reintenta la escritura. El módulo de inserción y transporte MCP no cambian.
-
-Para verificar el registro existente en **solo lectura**:
+## Verificar un registro existente sin escribir
 
 ```sh
 npm run notion:verify-workout -- examples/notion-workout.json
 ```
 
-Este comando reutiliza OAuth y el servidor de lectura, llama únicamente fetch y
-no importa ningún escritor ni solicita autorizaciones de guardado. El JSON debe
-ser exactamente el usado para el registro; cambiarlo produce otro marcador.
-No usar el comando de escritura para comprobar un registro existente.
+Usa el JSON que represente el entrenamiento guardado. No cambies fecha, sesión,
+contenido o transcripción: pueden cambiar el marcador determinista. La
+verificación requiere tanto el marcador único como la estructura completa,
+no basta encontrar el identificador.
 
-## Flujo unificado desde lenguaje natural
+| Resultado | Significado y siguiente paso |
+| --- | --- |
+| `VERIFIED` | Registro único y campos/bloques coincidentes. El CLI termina con código 0. |
+| `NOT_FOUND` | Lectura completa sin el marcador esperado. Revisa JSON y destino antes de decidir otro intento; código 1. |
+| `INDETERMINATE` | Lectura incompleta, timeout, error, duplicación o contenido no verificable. Solo relee/investiga; código 1. |
 
-`agent:workout` interpreta texto con el `WorkoutExtractionAgent` existente, usando
-Qwen3 4B en Ollama. El agente de extracción no tiene herramientas. El
-`WorkoutAgent` anterior con function calling y `agent:save` siguen disponibles.
-El nuevo flujo no entrega herramientas MCP ni permisos de guardado al modelo.
+La comparación canónica admite escapes equivalentes, rich text conocido,
+espacios no significativos y normalización de fences `text`/`txt`. Conserva
+orden, cifras y transcripción literal; dentro del bloque literal solo equipara
+CRLF/LF. La verificación posterior a escribir también contrasta el resto de la
+página con el estado previo. La comprobación aislada no puede demostrar
+retrospectivamente que nada más cambió sin un snapshot previo.
 
-```sh
-# Vista previa en cualquiera de los destinos; nunca escribe:
-npm run agent:workout -- "Hoy he hecho press banca inclinado. Primera serie, 35 kg y 8 repeticiones. Segunda serie, 32,5 kg y 8 repeticiones." --preview-only
+No hay reintentos automáticos de escritura. Si hay timeout tras aprobar, consulta
+primero el destino con el comando de verificación; no vuelvas a ejecutar el
+comando de escritura como forma de comprobar el resultado.
 
-# Seleccionar local o Notion de forma interactiva:
-npm run agent:workout -- "Hoy hice press banca: tres series de diez con 60 kg"
-```
-
-Después de interpretar, escribe `local` o `notion` cuando la terminal lo solicite.
-No se elige automáticamente un destino ni se guarda en ambos. Enter cancela.
-La selección Notion reutiliza OAuth, el servidor y los servicios existentes; no
-se establece conexión con Notion si eliges local. Si hace falta renovar el
-consentimiento interactivo, usa primero `notion:read-test-page -- --authorize`.
-
-Para el ejemplo ficticio de series variables, la vista previa mostrará la fecha
-absoluta que corresponda a `hoy` en Europe/Madrid, el ejercicio, serie 1 de 8 con
-35 kg, serie 2 de 8 con 32,5 kg y la transcripción inicial literal. Observaciones
-no mencionadas quedan como null y valores desconocidos se muestran como tales.
-Una fecha ausente/ambigua, ejercicio sin nombre o series inconsistentes provoca
-una petición de aclaración antes de preparar el guardado. Hay un máximo de cinco
-iteraciones. Las aclaraciones se pasan al intérprete como contexto explícito; la
-transcripción original almacenada sigue siendo la entrada inicial, sin trim ni
-reescritura del modelo. Los campos detectados deben revisarse: Zod valida forma,
-no garantiza que la interpretación sea fiel al texto.
-
-Se comprueban duplicados antes de pedir confirmación. El destino local muestra la
-ruta real del JSON y Notion el enlace fijo de la página autorizada. Se muestran
-series individuales, desconocidos, observaciones, nota original y digest. Para
-aprobar hay que escribir exactamente `GUARDAR <digest mostrado>`. `EDITAR` invalida
-el permiso anterior, pide una corrección y repite interpretación, selección y
-vista previa. Cualquier otra respuesta cancela. Una terminal no interactiva no
-aprueba operaciones.
-
-En local, el adaptador reutiliza `saveWorkout.invoke` y su permiso TypeScript de
-un solo uso; la herramienta vuelve a comprobar duplicados y el adaptador relee el
-archivo para verificar el registro. `WORKOUTS_FILE` conserva su significado. El
-esquema compartido admite `sessionName` e `individualSets` opcionales para no
-perder series variables; los JSON anteriores siguen válidos. La clave local
-incluye esos campos solo cuando existen. La lectura del JSON se ha extraído en
-`readWorkoutRecords` para no duplicar validación ni modificar datos en la vista
-previa. Los fallos remotos nunca disparan un guardado local.
-
-Notion permanece en vista previa por defecto, incluso sin `--preview-only`.
-Para una **prueba posterior** de una única escritura real, ejecuta:
+## Tests, evals y formato
 
 ```sh
-npm run agent:workout -- "Entrenamiento real con fecha y datos revisados" --enable-one-notion-write
+npm run lint
+npm run build
+npm test
+npm run test:coverage
+npm run test:watch
 ```
 
-Selecciona `notion`, revisa la vista previa exacta y escribe `GUARDAR <digest>`.
-El flag no sustituye la aprobación y `--preview-only` prevalece si están ambos.
-El permiso Notion existente caduca a los diez minutos y vincula contenido,
-marcador, ubicación y destino. Solo se intenta un commit; el comando termina
-tras el resultado. El nuevo flujo no ha ejecutado ninguna escritura real durante
-su implementación. No reutilices datos ficticios para una prueba real sin
-revisarlos expresamente.
+Los tests usan mocks y archivos temporales: no necesitan Ollama, no contactan
+con Notion y no usan `data/workouts.json`. La cobertura configurada abarca esquema,
+almacenamiento local, herramienta local y aprobación; no es cobertura de todo el
+repositorio. `test:watch` permanece activo hasta salir o pulsar `Ctrl+C`.
 
-`VERIFIED` permite declarar guardado. `NOT_FOUND` e `INDETERMINATE` se comunican
-como errores de verificación, no como éxito ni invitación a reintentar. Usa
-`notion:verify-workout` con un JSON equivalente para resolver una incertidumbre.
-No hay reintentos automáticos ni fallback. La exclusión Notion ahora es compartida
-por todas las instancias del servicio en un proceso; la exclusión local de este
-adaptador es por ruta. No hay lock entre procesos, ni CAS remoto; no ejecutes dos
-CLI que escriban simultáneamente. El comando local legado conserva su contrato.
+ESLint integra Prettier: indentación de dos espacios, ancho preferido de 80
+columnas, llaves obligatorias y separación de sentencias/métodos. Se excluyen
+`node_modules`, `dist`, `coverage`, datos y `.tmp`. El parser Babel evita la
+incompatibilidad declarada del parser typescript-eslint con TypeScript 7.
 
-Responsabilidades para entender la arquitectura:
-- **Modelo:** interpreta; devuelve datos, nunca permisos ni destinos ejecutables.
-- **Orquestador:** valida, solicita aclaraciones, pide selección, muestra una
-  propuesta y coordina exactamente un destino.
-- **Herramientas/adaptadores:** persisten y verifican usando los servicios ya
-  probados, sin depender de afirmaciones de éxito del modelo.
-- **Autorización:** decisión de la interfaz de confianza, asociada a un snapshot
-  interno y consumida antes de ejecutar; cancelar/editar la invalida.
+```sh
+npm run lint:fix
+```
 
-Archivos principales: `workout-interpreter.ts`, `workout-orchestrator.ts`,
-`workout-persistence.ts` y `agent-workout-cli.ts`. Los tests con mocks están en
-`workout-orchestrator.test.ts` y `workout-persistence.test.ts`. El eval real separado
-`npm run agent:eval:extraction` solo interpreta dos casos (series comunes y
-variables); no tiene destinos ni guarda archivos. El eval legado
-`agent:eval:ollama` sigue disponible y conserva su confirmación de guardado local.
+Este comando modifica fuentes. Revisa el diff después; `lint` solo comprueba y
+`build` sigue siendo responsable de los tipos.
 
-Validación de la integración: lint y build correctos, 131 tests Vitest aprobados,
-y los dos casos del eval real de extracción aprobados con qwen3:4b. El eval no
-cubre todas las expresiones posibles ni sustituye revisar cada vista previa.
+Los evals reales están separados de Vitest:
+
+```sh
+# Solo extracción: dos casos reales con qwen3:4b, sin persistencia.
+npm run agent:eval:extraction
+
+# Eval manual legado: puede guardar en .tmp después de confirmar con s/si/sí.
+WORKOUTS_FILE=.tmp/ollama-eval.json npm run agent:eval:ollama -- "Hoy hice sentadillas: tres series de ocho con 60 kg"
+```
+
+El segundo script ejecuta exactamente el mismo flujo que `agent:save`, no una
+batería automática de aserciones. La última validación funcional conocida pasó
+lint, build, **131 tests Vitest** y los dos casos del eval real de extracción.
+Estos resultados no garantizan la interpretación correcta de cualquier frase.
+
+## Arquitectura, límites y resolución de problemas
+
+- **Modelo:** `WorkoutExtractionAgent` interpreta; no tiene herramientas ni elige
+  permisos. `WorkoutAgent` conserva el function calling del flujo local legado.
+- **Orquestador:** `workout-orchestrator.ts` valida, solicita aclaraciones,
+  selección y aprobación sobre una propuesta interna.
+- **Persistencia:** `workout-persistence.ts` reutiliza `saveWorkout` o
+  `saveWorkoutToNotion`, con sus comprobaciones y verificaciones.
+- **Autorización:** la interfaz de confianza aprueba contenido/destino concretos;
+  cancelar o editar invalida el permiso. No se entrega el MCP genérico a Qwen3.
+
+Notion utiliza un bloqueo compartido por las instancias del servicio en un
+proceso. El adaptador local del nuevo flujo bloquea por ruta dentro del proceso;
+el comando legado conserva su contrato. No hay lock entre procesos ni CAS
+atómico en Notion: evita varias CLI escribiendo a la vez o editar la página
+durante un guardado.
+
+Si Ollama no responde, comprueba el servicio local y que el modelo sea `qwen3:4b`.
+Si Notion falla por acceso o expiración, repite la lectura con `--authorize` y
+revisa cuenta/workspace. Si falta integridad o el formato no es verificable,
+el proceso falla sin simular éxito. Un error remoto no escribe JSON como fallback.
+
+OAuth y lectura real desde Node se verificaron el 14 de noviembre de 2026. La
+primera escritura de prueba también se confirmó mediante relectura y revisión
+manual; el comando estructural devolvió después `VERIFIED`. Los comandos
+actuales mantienen las escrituras Notion deshabilitadas por defecto.
+
+
+## Historial de decisiones relevantes
+
+- **Persistencia local primero:** se conserva el flujo legado con function calling
+  y su autorización del Agents SDK. El orquestador reutiliza esa herramienta, no
+  mantiene una segunda implementación de escritura JSON.
+- **Una página de pruebas:** la propuesta inicial de añadir al final de la página
+  se sustituyó por insertar bloques justo bajo «Registros de prueba»
+  (`records-section-start`). Se conserva la tabla semanal y no se usan páginas
+  mensuales ni subpáginas como destino.
+- **OAuth real, no conexión simulada:** OAuth y lectura desde Node se verificaron
+  antes de autorizar la primera escritura. Una conexión del chat no se considera
+  evidencia de que la autenticación local funcione.
+- **Verificación estructural:** la primera escritura quedó guardada, pero la
+  comparación textual notificó un falso error al normalizar Notion la fecha,
+  el marcador inline, las viñetas y `text`/`txt`. Se sustituyó por comparación
+  canónica de marcador y bloques; se confirmó después `VERIFIED` en solo lectura.
+- **Modelo separado de permisos:** el flujo unificado utiliza extracción sin
+  herramientas y selección de destino en TypeScript. Se conserva la transcripción
+  inicial y se invalida la propuesta al editar, sin fallback ni reintentos de
+  escritura automáticos.

@@ -65,6 +65,26 @@ function fixture() {
 }
 
 describe("orquestación sin servicios", () => {
+  it("propaga un fallo de interpretación sin preparar destinos ni reintentar", async () => {
+    const f = fixture();
+
+    vi.mocked(f.deps.interpret).mockRejectedValue(
+      new Error("Connection error."),
+    );
+
+    await expect(f.flow.run("Hoy hice press")).rejects.toThrow(
+      "Connection error.",
+    );
+
+    expect(f.deps.interpret).toHaveBeenCalledOnce();
+
+    expect(f.prepare).not.toHaveBeenCalled();
+
+    expect(f.deps.confirm).not.toHaveBeenCalled();
+
+    expect(f.commit).not.toHaveBeenCalled();
+  });
+
   it("valida extracción y conserva transcripción exacta y series", async () => {
     const f = fixture();
 

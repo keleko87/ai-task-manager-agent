@@ -1,3 +1,7 @@
+import {
+  formatWorkoutFlowError,
+  type WorkoutFlowStage,
+} from "./workout-flow-error.js";
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import { setTracingDisabled } from "@openai/agents";
@@ -14,10 +18,7 @@ import {
   createMcpWorkoutReader,
 } from "./notion/notion-mcp-read.js";
 import { createMcpWorkoutWriter } from "./notion/notion-mcp-write.js";
-import {
-  createNotionWorkoutService,
-  NotionVerificationError,
-} from "./notion/save-workout-to-notion.js";
+import { createNotionWorkoutService } from "./notion/save-workout-to-notion.js";
 
 setTracingDisabled(true);
 
@@ -46,10 +47,18 @@ const today = new Intl.DateTimeFormat("en-CA", {
   month: "2-digit",
   day: "2-digit",
 }).format(new Date());
+let stage: WorkoutFlowStage = "interpretación con Ollama";
+
 const flow = createWorkoutOrchestrator({
   referenceDate: today,
-  interpret: interpreter.interpret,
+  async interpret(text) {
+    stage = "interpretación con Ollama";
+
+    return interpreter.interpret(text);
+  },
   async clarify(reason) {
+    stage = "aclaración";
+
     if (!stdin.isTTY) {
       return null;
     }
@@ -61,6 +70,8 @@ const flow = createWorkoutOrchestrator({
     return answer.trim() ? answer : null;
   },
   async selectDestination() {
+    stage = "selección de destino";
+
     if (!stdin.isTTY) {
       return null;
     }
@@ -81,6 +92,8 @@ const flow = createWorkoutOrchestrator({
   },
   async prepare(destination, workout) {
     if (destination === "local") {
+      stage = "preparación local";
+
       return prepareLocalWorkout(
         workout,
         resolveWorkoutStoragePath(process.env.WORKOUTS_FILE),
@@ -93,7 +106,11 @@ const flow = createWorkoutOrchestrator({
 
       server = createReadServer(provider, enableNotion && !previewOnly);
 
+      stage = "OAuth de Notion";
+
       await authorizeNotion(provider);
+
+      stage = "conexión MCP";
 
       await server.connect();
 
@@ -108,6 +125,8 @@ const flow = createWorkoutOrchestrator({
       });
     }
 
+    stage = "lectura y vista previa de Notion";
+
     return prepareNotionWorkout(notion, workout, enableNotion && !previewOnly);
   },
   show(preview) {
@@ -116,6 +135,8 @@ const flow = createWorkoutOrchestrator({
     );
   },
   async confirm(preview) {
+    stage = "confirmación";
+
     if (!stdin.isTTY) {
       return "cancel";
     }
@@ -123,6 +144,10 @@ const flow = createWorkoutOrchestrator({
     const answer = await prompt.question(
       `Escribe GUARDAR ${preview.digest} para autorizar una vez, EDITAR para corregir o Enter para cancelar:\n> `,
     );
+
+    if (answer === `GUARDAR ${preview.digest}`) {
+      stage = "guardado y verificación";
+    }
 
     return answer === `GUARDAR ${preview.digest}`
       ? "approve"
@@ -135,13 +160,7 @@ const flow = createWorkoutOrchestrator({
 try {
   console.dir(await flow.run(originalText), { depth: null });
 } catch (error) {
-  if (error instanceof NotionVerificationError) {
-    console.error(error.verification);
-  } else {
-    console.error(
-      "No se completó el flujo. No hay fallback ni reintentos automáticos. Si hubo un intento remoto, verifica Notion en solo lectura.",
-    );
-  }
+  console.error(formatWorkoutFlowError(error, stage));
 
   process.exitCode = 1;
 } finally {
