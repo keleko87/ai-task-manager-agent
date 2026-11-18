@@ -19,7 +19,9 @@
     "notion:preview-workout": "npm run build && node dist/notion/notion-write-cli.js",
     "notion:verify-workout": "npm run build && node dist/notion/notion-verify-cli.js",
     "agent:workout": "npm run build && node dist/agent-workout-cli.js",
-    "agent:eval:extraction": "npm run build && node dist/evals/workout-extraction-ollama.js"
+    "agent:eval:extraction": "npm run build && node dist/evals/workout-extraction-ollama.js",
+    "agent:voice": "npm run build && node dist/agent-voice-cli.js",
+    "agent:eval:voice": "npm run build && node dist/evals/voice-wav.js"
   },
   "keywords": [],
   "author": "",

@@ -33,10 +33,12 @@ export function createOllamaInterpreter() {
   });
 
   return {
-    async interpret(text: string) {
+    async interpret(text: string, signal?: AbortSignal) {
       const result = await runner.run(WorkoutExtractionAgent, text, {
         maxTurns: 2,
-        signal: AbortSignal.timeout(120_000),
+        signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(120_000)])
+          : AbortSignal.timeout(120_000),
       });
 
       return parseWorkoutInterpretation(result.finalOutput);

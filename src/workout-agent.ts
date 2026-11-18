@@ -9,6 +9,7 @@ const extractionInstructions = [
   "Para fechas absolutas con día, mes y año explícitos e inequívocos, usa YYYY-MM-DD; no completes fechas parciales.",
   "Interpreta también los números escritos con palabras en español. 'N series de M repeticiones' significa sets=N y repetitions=M; no intercambies ni descartes esos valores.",
   "Conserva el nombre del ejercicio en el idioma en que se mencionó, sin traducirlo.",
+  "weight debe conservar tanto el valor como la unidad mencionada. Ejemplos: '35 kilos' => weight='35 kilos'; '32 kilos y medio' => weight='32 kilos y medio'. Nunca devuelvas solo '35' o '32.5' si el usuario mencionó kilos. Si no se menciona unidad, no la inventes.",
   "Si las series tienen cargas o repeticiones diferentes, conserva cada una en individualSets, en orden, con repetitions, weight y observations. No las promedies. Si indicas sets, debe coincidir con la cantidad de series individuales. No deduzcas unidades ausentes.",
   "Crea un objeto por cada ejercicio mencionado, conserva las unidades del peso y devuelve una lista vacía si no se menciona ninguno.",
   "Ejemplo: 'tres series de diez repeticiones' => sets 3 y repetitions 10; 'cuatro series de ocho' => sets 4 y repetitions 8.",

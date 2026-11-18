@@ -4,13 +4,15 @@ Agente TypeScript que interpreta entrenamientos con Qwen3 4B mediante Ollama,
 valida los datos con Zod y permite guardarlos en JSON local o en una página de
 pruebas de Notion. Utiliza OpenAI Agents SDK y Notion MCP oficial con OAuth.
 El usuario elige un único destino y aprueba el contenido antes de guardar.
-No incluye captura de audio, Gmail ni WhatsApp.
+Incluye entrada de voz local mediante micrófono o WAV, con revisión de la
+transcripción y vista previa sin guardado. No incluye Gmail ni WhatsApp.
 
 **Estado actual:** Qwen3 mediante Ollama, validación Zod y orquestador operativo;
 OAuth, lectura y primera escritura controlada de Notion MCP ya verificados.
 El flujo unificado está implementado y la escritura en Notion sigue deshabilitada
-por defecto. Última validación funcional conocida: 131 tests y dos evals reales
-de extracción aprobados.
+por defecto. Última validación local: 180 tests, lint y build aprobados. También se ha
+probado STT real y el recorrido desde un WAV sintético hasta vista previa;
+la prueba con micrófono queda pendiente de permiso y dictado del usuario.
 
 ## Requisitos e instalación
 
@@ -18,7 +20,9 @@ de extracción aprobados.
   el que se ha validado el proyecto. Vitest requiere Node 22.12 o superior dentro
   de la rama 22; Node 18 no sirve para esta batería.
 - npm.
-- Ollama en `http://localhost:11434`, con `qwen3:4b`, para los comandos `agent:*`.
+- Ollama en `http://localhost:11434`, con `qwen3:4b`, para interpretar con `agent:test`, `agent:save`, `agent:workout` y los evals
+  de Qwen3. La voz también lo necesita al preparar el entrenamiento; el modo
+  `--transcribe-only` y `agent:eval:voice` no lo necesitan.
 - macOS y acceso a su llavero, conexión a Internet y permisos en la página de
   pruebas para los comandos Notion. Los tests con mocks no requieren esto.
 - Terminal interactiva para seleccionar destino, aclarar datos y aprobar escrituras.
@@ -39,7 +43,7 @@ en `http://localhost:11434/v1`, con el valor ficticio `ollama` y trazado desacti
 
 ## Referencia completa de comandos npm
 
-Esta tabla cubre los **15 scripts** definidos en `package.json`. El separador
+Esta tabla cubre los **17 scripts** definidos en `package.json`. El separador
 `--` entrega los argumentos al programa, en lugar de a npm. Encierra el texto del
 entrenamiento entre comillas. Los comandos de agente y Notion compilan antes de
 arrancar; `lint` y los tests trabajan directamente sobre los fuentes.
@@ -61,6 +65,8 @@ sección de primera ejecución utiliza exclusivamente operaciones sin guardado.
 | `npm run agent:save -- "Texto"` | Flujo local legado mediante function calling. | Ollama; escribe JSON solo tras confirmar con `s`, `si` o `sí`. |
 | `npm run agent:eval:extraction` | Eval real de extracción de series comunes y variables. | Ollama; no guarda ni contacta con Notion. |
 | `npm run agent:eval:ollama -- "Texto"` | Eval manual legado del function calling y guardado local. | Es un alias de `agent:save`; puede escribir JSON tras aprobar. |
+| `npm run agent:voice` | Graba, transcribe, pide revisión y prepara el entrenamiento. | FFmpeg para micrófono, whisper.cpp y modelo; Ollama para interpretar. Solo vista previa, sin opciones de escritura. |
+| `npm run agent:eval:voice -- audio.wav` | Transcribe un WAV con el proveedor real y muestra texto/diagnóstico. | whisper.cpp y modelo; sin micrófono, Qwen3 ni persistencia. Revisión de precisión manual. |
 | `npm run notion:read-test-page` | Lee la página autorizada y muestra su contenido. | OAuth, llavero y red; sin Ollama ni escrituras remotas. |
 | `npm run notion:preview-workout -- examples/notion-workout.json` | Valida un JSON, lee duplicados y muestra la propuesta. | OAuth, llavero y red; no escribe por defecto. |
 | `npm run notion:verify-workout -- examples/notion-workout.json` | Verifica un registro ya existente usando el JSON esperado. | OAuth, llavero y red; exclusivamente lectura. |
@@ -349,7 +355,8 @@ WORKOUTS_FILE=.tmp/ollama-eval.json npm run agent:eval:ollama -- "Hoy hice senta
 
 El segundo script ejecuta exactamente el mismo flujo que `agent:save`, no una
 batería automática de aserciones. La última validación funcional conocida pasó
-lint, build, **131 tests Vitest** y los dos casos del eval real de extracción.
+lint, build y **180 tests Vitest**. Los dos casos del eval real de extracción
+se aprobaron en la fase anterior; las pruebas reales de voz se describen abajo.
 Estos resultados no garantizan la interpretación correcta de cualquier frase.
 
 ## Arquitectura, límites y resolución de problemas
@@ -400,3 +407,198 @@ actuales mantienen las escrituras Notion deshabilitadas por defecto.
   herramientas y selección de destino en TypeScript. Se conserva la transcripción
   inicial y se invalida la propuesta al editar, sin fallback ni reintentos de
   escritura automáticos.
+
+## Voz local — implementada, solo vista previa
+
+Flujo: **micrófono/WAV → whisper.cpp → revisión humana → texto aprobado →
+agente Qwen3 → Zod → orquestador existente → destino y duplicados → vista previa**.
+El comando de voz nunca habilita escritores, ni siquiera al elegir Notion. No
+acepta `--enable-one-write` ni `--enable-one-notion-write`. No guarda al terminar
+la grabación y no hace fallback entre destinos. Los comandos de texto conservan
+sus modos de autorización existentes.
+
+### Dependencias y configuración de voz
+
+Se ha comprobado el Mac arm64 con whisper.cpp **1.9.5** y FFmpeg **9.0.2**;
+FFmpeg incluye la entrada AVFoundation. No se añadieron dependencias npm.
+Para preparar otro Mac con Homebrew, tras revisar las herramientas a instalar:
+
+```sh
+brew install whisper.cpp ffmpeg
+mkdir -p models
+curl --fail --location --output models/ggml-base.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
+whisper-cli --help
+ffmpeg -hide_banner -devices
+```
+
+`ggml-base.bin` es el modelo **base multilingüe**, de unos **142 MiB**; no uses
+`base.en`, que es solo inglés. La instalación/descarga requieren Internet, pero
+la captura y la transcripción son locales y no envían audio a terceros. Puedes
+usar un archivo de modelo local ya descargado. No se descargan modelos desde
+el CLI automáticamente. `models/` y los audios WAV/PCM se excluyen de Git.
+La instalación en este Mac ya se realizó; no necesitas repetirla.
+
+Fuentes de configuración: [whisper.cpp](https://github.com/ggml-org/whisper.cpp),
+[fórmula Homebrew](https://formulae.brew.sh/formula/whisper.cpp) y
+[AVFoundation en FFmpeg](https://ffmpeg.org/ffmpeg-devices.html#avfoundation).
+
+| Configuración | Valor predeterminado / uso |
+| --- | --- |
+| `--model /ruta/modelo.bin` | Modelo local para `agent:voice`. Prevalece sobre `WHISPER_MODEL`. |
+| `WHISPER_MODEL` | Modelo para voz/eval; por defecto `models/ggml-base.bin`, relativo al directorio actual. |
+| `WHISPER_CPP_BIN` | Ejecutable de transcripción; por defecto `whisper-cli` en PATH. |
+| `FFMPEG_BIN` | Ejecutable para capturar; por defecto `ffmpeg` en PATH. |
+| `--device 0` | Selecciona dispositivo de audio AVFoundation por índice o nombre; por defecto `default`. |
+| `--file /ruta/audio.wav` | Sustituye la captura de micrófono por un archivo WAV existente. |
+| `--transcribe-only` | Revisa la transcripción y termina sin llamar a Qwen3 ni consultar destinos. |
+
+### Primera prueba con micrófono
+
+Desde el proyecto, con Node 24.22.2, herramientas y modelo instalados:
+
+```sh
+nvm use 24.22.2
+npm run agent:voice
+```
+
+1. Escribe `GRABAR` para activar el micrófono. Enter cancela sin grabar.
+2. Dicta unos segundos. Enter detiene; el límite automático es de 60 segundos.
+   `Ctrl+C` cancela y termina el proceso de captura.
+3. Revisa la transcripción. Escribe `ACEPTAR`, `EDITAR` o Enter para cancelar.
+4. Si editas, escribe el texto completo corregido en una línea y confirma con
+   `ACEPTAR`. El texto aprobado, sin trim ni reformulación, será la transcripción
+   original de la entrada al agente.
+5. Qwen3 interpreta. Responde aclaraciones si hacen falta y elige `local` o
+   `notion`. Local solo consulta duplicados; Notion requiere OAuth y solo lee.
+   Revisa la vista previa. No se ofrece autorización de guardado en voz.
+
+macOS puede pedir permiso de micrófono para Terminal/iTerm o para la aplicación
+que aloje la terminal del IDE. Revisa **Ajustes del Sistema → Privacidad y
+seguridad → Micrófono**. Si se deniega, se devuelve un error controlado; no se
+simula una grabación válida. No se ha activado el micrófono durante la validación
+automatizada ni durante la prueba de WAV sintético.
+
+Para aislar captura/transcripción sin Ollama:
+
+```sh
+npm run agent:voice -- --transcribe-only
+```
+
+Para consultar los dispositivos disponibles de forma deliberada:
+
+```sh
+ffmpeg -f avfoundation -list_devices true -i ""
+```
+
+Ese comando puede solicitar permisos de macOS y acabar con un código distinto
+de cero después de listar dispositivos. No forma parte de los tests.
+
+### Prueba reproducible con WAV
+
+El contrato de entrada es **RIFF/WAVE PCM16, mono, 16 kHz**, máximo **60 segundos**
+y **4 MiB**. Otros formatos se rechazan explícitamente; no se convierten de forma
+oculta. Para convertir una copia local:
+
+```sh
+ffmpeg -i /ruta/original.m4a -ar 16000 -ac 1 -c:a pcm_s16le /ruta/prueba.wav
+npm run agent:voice -- --file /ruta/prueba.wav
+
+# STT y revisión humana, sin LLM:
+npm run agent:voice -- --file /ruta/prueba.wav --transcribe-only
+
+# Eval real explícito: solo STT, sin aprobación ni procesamiento posterior:
+npm run agent:eval:voice -- /ruta/prueba.wav
+```
+
+El WAV de entrada proporcionado por el usuario nunca se elimina ni modifica.
+Las grabaciones y las copias/JSON de whisper se crean en directorios temporales
+privados y se eliminan en `finally`, al terminar o fallar, antes de persistencia.
+Los procesos tienen timeout, cancelación y escalado de terminación. Un cierre
+forzado del sistema puede dejar temporales: no se promete limpieza tras SIGKILL
+o un apagado. No hay retención opcional de grabaciones en esta versión; para
+conservar una prueba usa un WAV que tú gestiones explícitamente.
+
+### Ejemplo y precisión
+
+En una prueba real con voz sintética local en español, whisper.cpp transcribió:
+
+```text
+ Hoy he hecho pres banca inclinado, primera serie, 35 kilos y 8 repeticiones, segunda serie, 32 kilos y medio y 8 repeticiones.
+```
+
+El WAV duró unos 9,4 segundos y la inferencia unos 5,4 segundos en este Mac.
+Esto es una observación puntual, no un benchmark. `pres` necesita corrección a
+`press`; revisa también decimales y unidades. El paso `EDITAR` permite corregirlo
+antes de Qwen3. La vista previa esperada conserva las series de 8 repeticiones
+con 35 kilos y 32 kilos y medio; el peso es un texto validado, no un cálculo de
+precisión garantizada por STT.
+
+En el primer recorrido real Qwen3 omitió las unidades en los campos de peso. Se
+reforzó la instrucción de extracción con ejemplos explícitos, sin reconstruir
+unidades automáticamente. Un eval puntual posterior con el texto aprobado
+confirmó `35 kilos` y `32 kilos y medio`, ambas series de 8. Sigue siendo un
+resultado observado, no una garantía de fidelidad para todas las entradas.
+
+Se rechazan audios demasiado breves, vacíos o de energía casi nula antes de STT.
+El umbral de energía no es un detector completo de voz: ruido o música pueden
+producir texto alucinado. No se garantiza reconocer números/decimales siempre.
+El modelo base prioriza tamaño y latencia; compara manualmente antes de aprobar
+la transcripción. Los errores muestran códigos controlados, sin volcar logs del
+motor que podrían incluir texto privado. El filtro puede rechazar voz muy baja.
+
+### Componentes reutilizables y futuro móvil
+
+- `audio/contracts.ts`: `AudioClip` contiene bytes y media type, no rutas macOS;
+  `SpeechToTextProvider` recibe audio y devuelve texto, idioma y diagnóstico mínimo.
+- `audio/wav.ts`: validación pura de formato, tamaño, duración y silencio básico.
+- `audio/local-audio.ts`: adaptadores Node de archivo y micrófono AVFoundation.
+- `audio/whisper-cpp.ts`: proveedor intercambiable de STT; solo este adaptador
+  conoce los argumentos del binario y sus JSON temporales.
+- `audio/voice-flow.ts`: revisión/aceptación/edición/cancelación mediante callbacks,
+  sin terminal, procesos, rutas locales ni credenciales.
+- `workout-cli-session.ts`: adaptador compartido de terminal para texto y voz;
+  reutiliza el intérprete, orquestador, persistencia y cliente MCP existentes.
+- `agent-voice-cli.ts`: conecta captura, STT, revisión y sesión compartida con
+  `previewOnly: true` y `enableNotion: false` fijados.
+
+**Speech-to-Text** convierte sonido en texto. El **LLM** interpreta el entrenamiento;
+**Zod** comprueba sus datos. El **orquestador** coordina decisiones, las herramientas
+**MCP** acceden a Notion y la **persistencia** conserva/verifica registros solo en
+flujos autorizados. Voz no concede ninguna autorización de escritura.
+
+Arquitectura prevista, aún no implementada:
+
+```text
+Mac CLI / futura PWA Android-iOS
+             ↓
+  API autenticada por HTTPS
+             ↓
+      Núcleo del asistente
+             ↓
+     Proveedores LLM y STT
+             ↓
+   Persistencia / Notion MCP
+```
+
+Los contratos `AudioClip`, `Transcription`, `TranscriptReview` y los resultados
+estructurados de `runVoicePreview` pueden usarse desde un futuro backend HTTP.
+El proveedor LLM también es sustituible mediante el callback `interpret` existente.
+Los navegadores móviles suelen generar audio comprimido: hará falta un adaptador
+de conversión/validación a PCM WAV; esta versión no admite WebM/M4A directamente.
+El orquestador ya recibe callbacks de revisión/confirmación y no depende de
+readline; un adaptador HTTP deberá conservar estado por sesión y resolver esos
+pasos en peticiones distintas. No se ha implementado una API, PWA, autenticación,
+servidor público ni despliegue cloud.
+
+Hoy dependen de macOS el micrófono AVFoundation, el llavero OAuth y la apertura
+del navegador; la CLI es Node. Un teléfono no ejecutará estos adaptadores ni
+recibirá tokens Notion. Pasos futuros: recibir audio/texto en un backend privado,
+autenticar usuarios, usar HTTPS, aislar sesiones y previews, validar en backend,
+proteger credenciales, limitar uploads/solicitudes y vincular cada permiso de un
+solo uso al usuario y snapshot. Solo después, añadir cliente web móvil/PWA.
+No se exponen herramientas MCP administrativas al cliente.
+
+Las pruebas de audio con mocks no acceden al micrófono, a modelos ni a Notion.
+`agent:eval:voice` es una prueba real explícita y separada de Vitest. Los evals de
+Qwen3 siguen separados en `agent:eval:extraction`. No se ha modificado el plugin
+privado ni se han guardado entrenamientos durante esta implementación.

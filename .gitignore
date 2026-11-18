@@ -24,3 +24,8 @@ coverage/
 /data/workouts.json
 /.tmp/
 .DS_Store
+
+# Local voice assets and model weights
+/models/
+*.wav
+*.pcm
