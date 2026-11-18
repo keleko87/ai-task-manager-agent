@@ -1,4 +1,4 @@
-import { WorkoutExtractionSchema } from "./workout-schema.js";
+import { parseWorkoutInterpretation } from "./workout-interpreter.js";
 
 async function main(): Promise<void> {
   const originalText = process.argv.slice(2).join(" ").trim();
@@ -33,22 +33,7 @@ async function main(): Promise<void> {
       throw new Error("WorkoutAgent no devolvió una respuesta de texto.");
     }
 
-    const responseText = result.finalOutput
-      .replace(/<think>[\s\S]*?<\/think>/gi, "")
-      .replace(/^```(?:json)?\s*/i, "")
-      .replace(/\s*```$/, "")
-      .trim();
-    const jsonStart = responseText.indexOf("{");
-    const jsonEnd = responseText.lastIndexOf("}");
-
-    if (jsonStart === -1 || jsonEnd <= jsonStart) {
-      throw new Error("La respuesta del modelo no contiene un objeto JSON.");
-    }
-
-    const candidate: unknown = JSON.parse(
-      responseText.slice(jsonStart, jsonEnd + 1),
-    );
-    const extraction = WorkoutExtractionSchema.parse(candidate);
+    const extraction = parseWorkoutInterpretation(result.finalOutput);
 
     console.dir(
       {

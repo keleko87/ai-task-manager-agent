@@ -1,5 +1,13 @@
 import { z } from "zod";
 
+export const IndividualSetSchema = z
+  .object({
+    repetitions: z.number().int().positive().safe().nullable(),
+    weight: z.string().nullable(),
+    observations: z.string().nullable(),
+  })
+  .strict();
+
 export const WorkoutExtractionSchema = z
   .object({
     workoutDate: z
@@ -7,6 +15,7 @@ export const WorkoutExtractionSchema = z
       .nullable()
       .default(null)
       .describe("Fecha mencionada en el texto o null; no la deduzcas."),
+    sessionName: z.string().nullable().optional(),
     exercises: z.array(
       z.object({
         name: z
@@ -35,6 +44,7 @@ export const WorkoutExtractionSchema = z
           .nullable()
           .default(null)
           .describe("Peso exactamente como se indicó, con unidad, o null."),
+        individualSets: z.array(IndividualSetSchema).min(1).max(100).optional(),
         observations: z
           .string()
           .nullable()

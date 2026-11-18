@@ -298,3 +298,95 @@ Este comando reutiliza OAuth y el servidor de lectura, llama únicamente fetch y
 no importa ningún escritor ni solicita autorizaciones de guardado. El JSON debe
 ser exactamente el usado para el registro; cambiarlo produce otro marcador.
 No usar el comando de escritura para comprobar un registro existente.
+
+## Flujo unificado desde lenguaje natural
+
+`agent:workout` interpreta texto con el `WorkoutExtractionAgent` existente, usando
+Qwen3 4B en Ollama. El agente de extracción no tiene herramientas. El
+`WorkoutAgent` anterior con function calling y `agent:save` siguen disponibles.
+El nuevo flujo no entrega herramientas MCP ni permisos de guardado al modelo.
+
+```sh
+# Vista previa en cualquiera de los destinos; nunca escribe:
+npm run agent:workout -- "Hoy he hecho press banca inclinado. Primera serie, 35 kg y 8 repeticiones. Segunda serie, 32,5 kg y 8 repeticiones." --preview-only
+
+# Seleccionar local o Notion de forma interactiva:
+npm run agent:workout -- "Hoy hice press banca: tres series de diez con 60 kg"
+```
+
+Después de interpretar, escribe `local` o `notion` cuando la terminal lo solicite.
+No se elige automáticamente un destino ni se guarda en ambos. Enter cancela.
+La selección Notion reutiliza OAuth, el servidor y los servicios existentes; no
+se establece conexión con Notion si eliges local. Si hace falta renovar el
+consentimiento interactivo, usa primero `notion:read-test-page -- --authorize`.
+
+Para el ejemplo ficticio de series variables, la vista previa mostrará la fecha
+absoluta que corresponda a `hoy` en Europe/Madrid, el ejercicio, serie 1 de 8 con
+35 kg, serie 2 de 8 con 32,5 kg y la transcripción inicial literal. Observaciones
+no mencionadas quedan como null y valores desconocidos se muestran como tales.
+Una fecha ausente/ambigua, ejercicio sin nombre o series inconsistentes provoca
+una petición de aclaración antes de preparar el guardado. Hay un máximo de cinco
+iteraciones. Las aclaraciones se pasan al intérprete como contexto explícito; la
+transcripción original almacenada sigue siendo la entrada inicial, sin trim ni
+reescritura del modelo. Los campos detectados deben revisarse: Zod valida forma,
+no garantiza que la interpretación sea fiel al texto.
+
+Se comprueban duplicados antes de pedir confirmación. El destino local muestra la
+ruta real del JSON y Notion el enlace fijo de la página autorizada. Se muestran
+series individuales, desconocidos, observaciones, nota original y digest. Para
+aprobar hay que escribir exactamente `GUARDAR <digest mostrado>`. `EDITAR` invalida
+el permiso anterior, pide una corrección y repite interpretación, selección y
+vista previa. Cualquier otra respuesta cancela. Una terminal no interactiva no
+aprueba operaciones.
+
+En local, el adaptador reutiliza `saveWorkout.invoke` y su permiso TypeScript de
+un solo uso; la herramienta vuelve a comprobar duplicados y el adaptador relee el
+archivo para verificar el registro. `WORKOUTS_FILE` conserva su significado. El
+esquema compartido admite `sessionName` e `individualSets` opcionales para no
+perder series variables; los JSON anteriores siguen válidos. La clave local
+incluye esos campos solo cuando existen. La lectura del JSON se ha extraído en
+`readWorkoutRecords` para no duplicar validación ni modificar datos en la vista
+previa. Los fallos remotos nunca disparan un guardado local.
+
+Notion permanece en vista previa por defecto, incluso sin `--preview-only`.
+Para una **prueba posterior** de una única escritura real, ejecuta:
+
+```sh
+npm run agent:workout -- "Entrenamiento real con fecha y datos revisados" --enable-one-notion-write
+```
+
+Selecciona `notion`, revisa la vista previa exacta y escribe `GUARDAR <digest>`.
+El flag no sustituye la aprobación y `--preview-only` prevalece si están ambos.
+El permiso Notion existente caduca a los diez minutos y vincula contenido,
+marcador, ubicación y destino. Solo se intenta un commit; el comando termina
+tras el resultado. El nuevo flujo no ha ejecutado ninguna escritura real durante
+su implementación. No reutilices datos ficticios para una prueba real sin
+revisarlos expresamente.
+
+`VERIFIED` permite declarar guardado. `NOT_FOUND` e `INDETERMINATE` se comunican
+como errores de verificación, no como éxito ni invitación a reintentar. Usa
+`notion:verify-workout` con un JSON equivalente para resolver una incertidumbre.
+No hay reintentos automáticos ni fallback. La exclusión Notion ahora es compartida
+por todas las instancias del servicio en un proceso; la exclusión local de este
+adaptador es por ruta. No hay lock entre procesos, ni CAS remoto; no ejecutes dos
+CLI que escriban simultáneamente. El comando local legado conserva su contrato.
+
+Responsabilidades para entender la arquitectura:
+- **Modelo:** interpreta; devuelve datos, nunca permisos ni destinos ejecutables.
+- **Orquestador:** valida, solicita aclaraciones, pide selección, muestra una
+  propuesta y coordina exactamente un destino.
+- **Herramientas/adaptadores:** persisten y verifican usando los servicios ya
+  probados, sin depender de afirmaciones de éxito del modelo.
+- **Autorización:** decisión de la interfaz de confianza, asociada a un snapshot
+  interno y consumida antes de ejecutar; cancelar/editar la invalida.
+
+Archivos principales: `workout-interpreter.ts`, `workout-orchestrator.ts`,
+`workout-persistence.ts` y `agent-workout-cli.ts`. Los tests con mocks están en
+`workout-orchestrator.test.ts` y `workout-persistence.test.ts`. El eval real separado
+`npm run agent:eval:extraction` solo interpreta dos casos (series comunes y
+variables); no tiene destinos ni guarda archivos. El eval legado
+`agent:eval:ollama` sigue disponible y conserva su confirmación de guardado local.
+
+Validación de la integración: lint y build correctos, 131 tests Vitest aprobados,
+y los dos casos del eval real de extracción aprobados con qwen3:4b. El eval no
+cubre todas las expresiones posibles ni sustituye revisar cada vista previa.

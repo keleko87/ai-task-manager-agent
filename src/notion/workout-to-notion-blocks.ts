@@ -2,24 +2,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { WorkoutExtractionSchema } from "../workout-schema.js";
 
-const ExerciseSchema = WorkoutExtractionSchema.shape.exercises.element
-  .extend({
-    // Explicit series preserve variable loads, reps and supersets without inference.
-    individualSets: z
-      .array(
-        z
-          .object({
-            repetitions: z.number().int().positive().safe().nullable(),
-            weight: z.string().nullable(),
-            observations: z.string().nullable(),
-          })
-          .strict(),
-      )
-      .min(1)
-      .max(100)
-      .optional(),
-  })
-  .strict();
+const ExerciseSchema = WorkoutExtractionSchema.shape.exercises.element.strict();
 
 export const NotionWorkoutInputSchema = WorkoutExtractionSchema.extend({
   exercises: z.array(ExerciseSchema),

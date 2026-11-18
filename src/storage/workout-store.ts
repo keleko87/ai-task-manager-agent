@@ -38,16 +38,28 @@ function normalizeText(value: string | null): string | null {
 }
 
 export function createWorkoutDeduplicationKey(
-  workout: Pick<WorkoutRecord, "workoutDate" | "exercises">,
+  workout: Pick<WorkoutRecord, "workoutDate" | "exercises" | "sessionName">,
 ): string {
   return JSON.stringify({
     workoutDate: normalizeText(workout.workoutDate),
+    ...(workout.sessionName
+      ? { sessionName: normalizeText(workout.sessionName) }
+      : {}),
     exercises: workout.exercises.map((exercise) => ({
       name: normalizeText(exercise.name),
       sets: exercise.sets,
       repetitions: exercise.repetitions,
       weight: normalizeText(exercise.weight),
       observations: normalizeText(exercise.observations),
+      ...(exercise.individualSets
+        ? {
+            individualSets: exercise.individualSets.map((set) => ({
+              repetitions: set.repetitions,
+              weight: normalizeText(set.weight),
+              observations: normalizeText(set.observations),
+            })),
+          }
+        : {}),
     })),
   });
 }
@@ -58,11 +70,10 @@ export function resolveWorkoutStoragePath(configuredPath?: string): string {
     : DEFAULT_WORKOUTS_PATH;
 }
 
-export async function appendWorkoutRecord(
-  record: WorkoutRecord,
+export async function readWorkoutRecords(
   filePath: string,
   fileSystem: WorkoutFileSystem = defaultFileSystem,
-): Promise<number> {
+): Promise<WorkoutRecord[]> {
   let existingRecords: WorkoutRecord[] = [];
 
   try {
@@ -102,6 +113,16 @@ export async function appendWorkoutRecord(
       throw error;
     }
   }
+
+  return existingRecords;
+}
+
+export async function appendWorkoutRecord(
+  record: WorkoutRecord,
+  filePath: string,
+  fileSystem: WorkoutFileSystem = defaultFileSystem,
+): Promise<number> {
+  const existingRecords = await readWorkoutRecords(filePath, fileSystem);
 
   const incomingKey = createWorkoutDeduplicationKey(record);
 

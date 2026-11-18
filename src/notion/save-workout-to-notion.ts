@@ -89,6 +89,8 @@ function checkDuplicate(
   }
 }
 
+let busy = false;
+
 /** No Agents SDK registration: only the host can preview and authorize this flow. */
 export function createNotionWorkoutService(options: {
   reader: WorkoutReader;
@@ -97,7 +99,6 @@ export function createNotionWorkoutService(options: {
 }) {
   const pending = new Map<string, Prepared>();
   const now = options.now ?? Date.now;
-  let busy = false;
 
   return {
     async preview(

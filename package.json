@@ -17,7 +17,9 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "notion:preview-workout": "npm run build && node dist/notion/notion-write-cli.js",
-    "notion:verify-workout": "npm run build && node dist/notion/notion-verify-cli.js"
+    "notion:verify-workout": "npm run build && node dist/notion/notion-verify-cli.js",
+    "agent:workout": "npm run build && node dist/agent-workout-cli.js",
+    "agent:eval:extraction": "npm run build && node dist/evals/workout-extraction-ollama.js"
   },
   "keywords": [],
   "author": "",
